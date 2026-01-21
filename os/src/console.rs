@@ -1,0 +1,37 @@
+// os/src/console.rs
+use crate::sbi::console_putchar;
+use core::fmt::{self, Write};
+
+// 输出结构体（单元结构体）
+struct Stdout;
+
+// 为Stdout实现Write trait
+impl Write for Stdout {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for c in s.chars() {
+            console_putchar(c as usize);
+        }
+        Ok(())
+    }
+}
+
+// 核心打印函数
+pub fn print(args: fmt::Arguments) {
+    Stdout.write_fmt(args).unwrap();
+}
+
+// print!宏
+#[macro_export]
+macro_rules! print {
+    ($fmt: literal $(, $($arg: tt)+)?) => {
+        $crate::console::print(format_args!($fmt $(, $($arg)+)?));
+    }
+}
+
+// println!宏
+#[macro_export]
+macro_rules! println {
+    ($fmt: literal $(, $($arg: tt)+)?) => {
+        $crate::console::print(format_args!(concat!($fmt, "\n") $(, $($arg)+)?));
+    }
+}

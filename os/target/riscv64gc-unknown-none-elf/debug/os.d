@@ -1,1 +1,0 @@
-/root/rCore-dev/projects/RCGOS/os/target/riscv64gc-unknown-none-elf/debug/os: /root/rCore-dev/projects/RCGOS/os/src/entry.asm /root/rCore-dev/projects/RCGOS/os/src/lang_items.rs /root/rCore-dev/projects/RCGOS/os/src/main.rs

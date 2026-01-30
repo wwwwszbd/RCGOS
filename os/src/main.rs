@@ -5,9 +5,19 @@
 mod console;
 mod sbi;
 mod lang_items;
+mod logging;
+mod sync;
+mod stack_trace;
+pub mod batch;
+pub mod syscall;
+pub mod trap;
 
 use core::arch::global_asm;
+use log::*;
+//use sbi::*;
+
 global_asm!(include_str!("entry.asm"));
+global_asm!(include_str!("link_app.S"));
 
 fn clear_bss() {
     unsafe extern "C" {
@@ -23,10 +33,45 @@ fn clear_bss() {
 
 #[unsafe(no_mangle)]
 pub fn rust_main() -> ! {
-    clear_bss();  // 清零.bss段
-    // 测试输出
-    println!("Hello, world!");
-    // 测试panic
-    panic!("Shutdown machine!");
+    unsafe extern "C" {
+        fn stext();
+        fn etext();
+        fn srodata();
+        fn erodata();
+        fn sdata();
+        fn edata();
+        fn sbss();
+        fn ebss();
+        fn boot_stack_lower_bound();
+        fn boot_stack_top();
+    }
+    clear_bss();
+    logging::init();
+    println!("[kernel] Hello, world!");
+    trace!(
+        "[kernel] .text [{:#x}, {:#x})",
+        stext as *const () as usize, etext as *const () as usize
+    );
+    debug!(
+        "[kernel] .rodata [{:#x}, {:#x})",
+        srodata as *const () as usize, erodata as *const () as usize
+    );
+    info!(
+        "[kernel] .data [{:#x}, {:#x})",
+        sdata as *const () as usize, edata as *const () as usize
+    );
+    warn!(
+        "[kernel] boot_stack top=bottom={:#x}, lower_bound={:#x}",
+        boot_stack_top as *const () as usize, boot_stack_lower_bound as *const () as usize
+    );
+    error!("[kernel] .bss [{:#x}, {:#x})", sbss as *const () as usize, ebss as *const () as usize);
+
+    // CI autotest success: sbi::shutdown(false)
+    // CI autotest failed : sbi::shutdown(true)
+    //sbi::
+    // shutdown(false)
+    trap::init();
+    batch::init();
+    batch::run_next_app();
 }
 

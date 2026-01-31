@@ -3,21 +3,13 @@
     .section .data
     .global _num_app
 _num_app:
-    .quad 13
+    .quad 5
     .quad app_0_start
     .quad app_1_start
     .quad app_2_start
     .quad app_3_start
     .quad app_4_start
-    .quad app_5_start
-    .quad app_6_start
-    .quad app_7_start
-    .quad app_8_start
-    .quad app_9_start
-    .quad app_10_start
-    .quad app_11_start
-    .quad app_12_start
-    .quad app_12_end
+    .quad app_4_end
 
     .section .data
     .global app_0_start
@@ -53,59 +45,3 @@ app_3_end:
 app_4_start:
     .incbin "../user/target/riscv64gc-unknown-none-elf/release/04priv_csr.bin"
 app_4_end:
-
-    .section .data
-    .global app_5_start
-    .global app_5_end
-app_5_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/bad_address.bin"
-app_5_end:
-
-    .section .data
-    .global app_6_start
-    .global app_6_end
-app_6_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/bad_instruction.bin"
-app_6_end:
-
-    .section .data
-    .global app_7_start
-    .global app_7_end
-app_7_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/bad_register.bin"
-app_7_end:
-
-    .section .data
-    .global app_8_start
-    .global app_8_end
-app_8_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/exit.bin"
-app_8_end:
-
-    .section .data
-    .global app_9_start
-    .global app_9_end
-app_9_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/hello_world.bin"
-app_9_end:
-
-    .section .data
-    .global app_10_start
-    .global app_10_end
-app_10_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/power.bin"
-app_10_end:
-
-    .section .data
-    .global app_11_start
-    .global app_11_end
-app_11_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/test1_write0.bin"
-app_11_end:
-
-    .section .data
-    .global app_12_start
-    .global app_12_end
-app_12_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/test1_write1.bin"
-app_12_end:

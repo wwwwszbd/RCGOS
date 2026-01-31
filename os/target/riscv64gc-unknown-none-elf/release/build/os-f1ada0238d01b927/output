@@ -5,11 +5,3 @@ app_1: 01store_fault
 app_2: 02power
 app_3: 03priv_inst
 app_4: 04priv_csr
-app_5: bad_address
-app_6: bad_instruction
-app_7: bad_register
-app_8: exit
-app_9: hello_world
-app_10: power
-app_11: test1_write0
-app_12: test1_write1

@@ -1,1 +1,0 @@
-/root/rCore-dev/projects/RCGOS/user/target/riscv64gc-unknown-none-elf/release/test1_write0: /root/rCore-dev/projects/RCGOS/user/src/bin/test1_write0.rs /root/rCore-dev/projects/RCGOS/user/src/console.rs /root/rCore-dev/projects/RCGOS/user/src/lang_items.rs /root/rCore-dev/projects/RCGOS/user/src/lib.rs /root/rCore-dev/projects/RCGOS/user/src/syscall.rs

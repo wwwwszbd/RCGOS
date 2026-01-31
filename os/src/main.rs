@@ -7,8 +7,9 @@ mod sbi;
 mod lang_items;
 mod logging;
 mod sync;
+mod config;
 mod stack_trace;
-pub mod batch;
+pub mod loader;
 pub mod syscall;
 pub mod trap;
 
@@ -71,7 +72,7 @@ pub fn rust_main() -> ! {
     //sbi::
     // shutdown(false)
     trap::init();
-    batch::init();
-    batch::run_next_app();
+    loader::load_apps();
+    loader::run_next_app();
 }
 

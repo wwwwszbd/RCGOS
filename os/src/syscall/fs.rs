@@ -1,30 +1,41 @@
-
+// use crate::config::*;
+// use crate::task::get_current_task;
+// use crate::loader::{USER_STACK, get_base_i};
 
 const FD_STDOUT: usize = 1;
-//use crate::batch::{get_current_app_range, get_user_stack_range};
 
+// fn check_addr(slice: &[u8]) -> Option<isize> {
+//     let task_id = get_current_task();
+//     let app_start = slice.as_ptr().addr();
+//     let app_size = slice.len();
+//     if !((app_start >= get_base_i(task_id) &&
+//         app_start + app_size <= get_base_i(task_id) + APP_SIZE_LIMIT) ||
+//         (app_start + app_size <= USER_STACK[task_id].get_sp() &&
+//         app_start >= USER_STACK[task_id].get_sp() - USER_STACK_SIZE)) {
+//         None
+//     } else {
+//         Some(app_size as isize)
+//     }
+// }
 /// write buf of length `len`  to a file with `fd`
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
-    // let app_range = get_current_app_range();
-    // let stack_range = get_user_stack_range();
-    // //println!("[app_range]: [{:#x}, {:#x})", app_range.0,app_range.1);
-    // //println!("[stack_range]: [{:#x}, {:#x})", stack_range.0,stack_range.1);
-    // let buf_begin_pointer = buf as usize;
-    // let buf_end_pointer = unsafe{buf.offset(len as isize)} as usize;
-    // //println!("[buf_begin_pointer]: {:#x}", buf_begin_pointer);
-    // //println!("[buf_end_pointer]: {:#x}", buf_end_pointer);
-    // // 检查缓冲区是否完全在应用内存范围内
-    // let in_app_range = (buf_begin_pointer >= app_range.0 && buf_begin_pointer < app_range.1) && 
-    //                   (buf_end_pointer >= app_range.0 && buf_end_pointer < app_range.1);
     
-    // // 检查缓冲区是否完全在栈内存范围内
-    // let in_stack_range = (buf_begin_pointer >= stack_range.0 && buf_begin_pointer < stack_range.1) && 
-    //                     (buf_end_pointer >= stack_range.0 && buf_end_pointer < stack_range.1);
-    
-    // // 如果缓冲区既不完全在应用内存内，也不完全在栈内存内，则返回错误
-    // if !in_app_range && !in_stack_range {
-    //     println!("out of range!");
-    //     return -1 as isize;
+    // match fd {
+    //     FD_STDOUT => {
+    //         let slice = unsafe { core::slice::from_raw_parts(buf, len) };
+    //         match check_addr(slice) {
+    //             None => -1 as isize,
+    //             Some(i_len) => {
+    //                 let str = core::str::from_utf8(slice).unwrap();
+    //                 print!("{}", str);
+    //                 i_len
+    //             }
+    //         }
+    //     }
+    //     _ => {
+    //         //panic!("Unsupported fd in sys_write!");
+    //         -1 as isize
+    //     }
     // }
 
     match fd {

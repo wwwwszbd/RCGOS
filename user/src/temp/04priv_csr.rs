@@ -4,14 +4,14 @@
 #[macro_use]
 extern crate user_lib;
 
-use core::arch::asm;
+use riscv::register::sstatus::{self, SPP};
 
 #[unsafe(no_mangle)]
 fn main() -> i32 {
-    println!("Try to execute privileged instruction in U Mode");
+    println!("[04]Try to access privileged CSR in U Mode");
     println!("Kernel should kill this application!");
     unsafe {
-        asm!("sret");
+        sstatus::set_spp(SPP::User);
     }
     0
 }

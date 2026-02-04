@@ -2,20 +2,27 @@
 #![no_main]
 
 #[macro_use]
+extern crate log;
+
+#[macro_use]
 mod console;
 mod sbi;
 mod lang_items;
 mod logging;
 mod sync;
 mod config;
+mod task;
 mod stack_trace;
 pub mod loader;
 pub mod syscall;
 pub mod trap;
 
+mod timer;
+
+#[path = "boards/qemu.rs"]
+mod boards;
+
 use core::arch::global_asm;
-use log::*;
-//use sbi::*;
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("link_app.S"));
@@ -73,6 +80,9 @@ pub fn rust_main() -> ! {
     // shutdown(false)
     trap::init();
     loader::load_apps();
-    loader::run_next_app();
+    trap::enable_timer_interrupt();
+    timer::set_next_trigger();
+    task::run_first_task();
+    panic!("Unreachable in rust_main!");
 }
 

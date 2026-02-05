@@ -8,6 +8,7 @@
     .section .text
     .globl __alltraps
     .globl __restore
+    .globl __pre_restore
     .align 2
 __alltraps:
     csrrw sp, sscratch, sp

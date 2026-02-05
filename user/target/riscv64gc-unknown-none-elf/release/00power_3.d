@@ -1,1 +1,0 @@
-/root/rCore-dev/projects/RCGOS/user/target/riscv64gc-unknown-none-elf/release/00power_3: /root/rCore-dev/projects/RCGOS/user/src/bin/00power_3.rs /root/rCore-dev/projects/RCGOS/user/src/console.rs /root/rCore-dev/projects/RCGOS/user/src/lang_items.rs /root/rCore-dev/projects/RCGOS/user/src/lib.rs /root/rCore-dev/projects/RCGOS/user/src/syscall.rs

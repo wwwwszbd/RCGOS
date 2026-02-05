@@ -52,23 +52,30 @@ pub fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
         }
         Trap::Exception(Exception::StoreFault) |
         Trap::Exception(Exception::StorePageFault) => {
-            println!("[kernel] PageFault in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.", stval, cx.sepc);
+            println!("[kernel] PageFault in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.", 
+                stval, cx.sepc
+            );
             // run_next_app();
-            panic!("[kernel] Cannot continue!");
-            // exit_current_and_run_next();
+            // panic!("[kernel] Cannot continue!");
+            exit_current_and_run_next();
         }
         Trap::Exception(Exception::IllegalInstruction) => {
-            println!("[kernel] IllegalInstruction in application, kernel killed it.");
+            println!("[kernel] IllegalInstruction at sepc = {:#x}, stval = {:#x}", 
+                cx.sepc, stval
+            );
             // run_next_app();
-            panic!("[kernel] Cannot continue!");
-            // exit_current_and_run_next();
+            //panic!("[kernel] Cannot continue!");
+            exit_current_and_run_next();
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             set_next_trigger();
             suspend_current_and_run_next();
         }
         _ => {
-            panic!("Unsupported trap {:?}, stval = {:#x}!", scause.cause(), stval);
+            panic!("Unsupported trap {:?}, stval = {:#x}!", 
+                scause.cause(), 
+                stval
+            );
         }
     }
     crate::task::user_time_start();

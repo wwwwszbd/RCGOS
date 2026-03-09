@@ -1,3 +1,5 @@
+/// 系统调用实现
+
 use crate::{
     config::MAX_SYSCALL_NUM,
     task::{exit_current_and_run_next, suspend_current_and_run_next, get_current_task_block, TaskStatus},
@@ -5,18 +7,18 @@ use crate::{
 };
 // use log::*;
 
-/// Task information
+/// 任务描述信息
 #[allow(dead_code)]
 pub struct TaskInfo {
-    /// Task status in it's life cycle
+    /// 任务状态在生命周期中的状态
     status: TaskStatus,
-    /// The numbers of syscall called by task
+    /// 任务调用的系统调用次数
     syscall_times: [u32; MAX_SYSCALL_NUM],
-    /// Total running time of task
+    /// 任务运行的总时间（单位：毫秒）
     time: usize,
 }
 
-/// task exits and submit an exit code
+/// 任务退出并提交退出码
 pub fn sys_exit(exit_code: i32) -> ! {
     println!("[kernel] Application exited with code {}", exit_code);
     exit_current_and_run_next();

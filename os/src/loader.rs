@@ -1,3 +1,9 @@
+/// 定义应用程序加载函数
+/// 
+/// 此函数负责加载应用程序到内存中。
+/// 它会根据应用程序的数量和大小，将应用程序从数据段复制到内存中。
+/// 加载完成后，会调用 `fence.i` 指令确保内存操作的顺序性。
+
 use crate::trap::TrapContext;
 use core::arch::asm;
 
@@ -41,79 +47,6 @@ impl KernelStack {
         trap_cx_ptr as usize
     }
 }
-
-// struct AppManager {
-//     num_app: usize,
-//     current_app: usize,
-// }
-
-// impl AppManager
-// {
-//     pub fn get_current_app(&self) -> usize
-//     {
-//         self.current_app
-//     }
-
-//     pub fn move_to_next_app(&mut self)
-//     {
-//         self.current_app += 1;
-//     }
-
-//     // pub fn get_current_app_range(&self) -> (usize, usize) {
-//     //     (APP_BASE_ADDRESS,APP_BASE_ADDRESS+self.app_start[self.current_app]-self.app_start[self.current_app-1])
-//     // }
-// }
-
-// lazy_static! {
-//     static ref APP_MANAGER: UPSafeCell<AppManager> = unsafe {
-//         UPSafeCell::new({
-//             let num_app = get_num_app();
-//             AppManager {
-//                 num_app,
-//                 current_app: 0,
-//             }
-//         })
-//     };
-// }
-
-/// init batch subsystem
-// pub fn init() {
-//     print_app_info();
-// }
-
-// /// print apps info
-// pub fn print_app_info() {
-//     APP_MANAGER.exclusive_access().print_app_info();
-// }
-
-/// run next app
-// pub fn run_next_app() -> ! {
-//     let mut app_manager = APP_MANAGER.exclusive_access();
-//     let current_app = app_manager.get_current_app();
-//     if current_app >= app_manager.num_app-1 {
-//         println!("All applications completed!");
-//         shutdown(false);
-//     }
-//     app_manager.move_to_next_app();
-//     drop(app_manager);
-//     // before this we have to drop local variables related to resources manually
-//     // and release the resources
-//     unsafe extern "C" {
-//         fn __restore();
-//     }
-//     unsafe {
-//         __restore(init_app_cx(current_app));
-//     }
-//     panic!("Unreachable in batch::run_current_app!");
-// }
-
-// pub fn get_current_app_range() -> (usize, usize) {
-//     APP_MANAGER.exclusive_access().get_current_app_range()
-// }
-
-// pub fn get_user_stack_range() -> (usize, usize) {
-//     (USER_STACK.get_sp() - USER_STACK_SIZE, USER_STACK.get_sp())
-// }
 
 pub fn load_apps() {
  unsafe extern "C" { fn _num_app(); }

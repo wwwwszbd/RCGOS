@@ -1,5 +1,5 @@
  # user/build.py
-
+ # 构建用户应用程序
 import os
 
 base_address = 0x80400000

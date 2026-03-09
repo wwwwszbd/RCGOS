@@ -1,7 +1,19 @@
+# Cargo配置文件 - 用于配置Rust编译器的行为和目标平台
+
+# 构建配置段
+# 指定编译目标平台为RISC-V 64位裸机环境
 [build]
 target = "riscv64gc-unknown-none-elf"
 
+
+# 特定目标平台的编译器标志配置
+
 [target.riscv64gc-unknown-none-elf]
  rustflags = [
-     "-Clink-arg=-Tsrc/linker.ld", "-Cforce-frame-pointers=yes"
+
+     # 使用src/linker.ld文件定义内存布局
+     "-Clink-arg=-Tsrc/linker.ld", 
+     
+     # 强制启用帧指针，便于调试和栈回溯
+     "-Cforce-frame-pointers=yes"
  ]

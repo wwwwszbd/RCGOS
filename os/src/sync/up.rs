@@ -1,19 +1,23 @@
+/// 一个只能在单处理器上使用的安全的可共享可变数据容器。
+///
+/// 该容器通过内部的 `RefCell` 实现了 interior mutability，
+/// 同时通过 `unsafe` 标记确保了在多处理器环境下的安全使用。
+
 use core::cell::{RefCell, RefMut};
 
 pub struct UPSafeCell<T> {
-    /// inner data
+    /// 内部数据
     inner: RefCell<T>,
 }
 
 unsafe impl<T> Sync for UPSafeCell<T> {}
 
 impl<T> UPSafeCell<T> {
-    /// User is responsible to guarantee that inner struct is only used in
-    /// uniprocessor.
+    /// 创建一个新的 `UPSafeCell`。
     pub unsafe fn new(value: T) -> Self {
         Self { inner: RefCell::new(value) }
     }
-    /// Panic if the data has been borrowed.
+    /// 获取对内部数据的可变引用。
     pub fn exclusive_access(&self) -> RefMut<'_, T> {
         self.inner.borrow_mut()
     }

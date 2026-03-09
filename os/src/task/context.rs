@@ -1,3 +1,7 @@
+/// 任务上下文
+
+
+/// 任务上下文结构体
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub struct TaskContext {
@@ -6,7 +10,9 @@ pub struct TaskContext {
     s: [usize; 12],
 }
 
+/// 任务上下文的方法
 impl TaskContext {
+    /// 创建一个零初始化的任务上下文
     pub fn zero_init() -> Self {
         Self {
             ra: 0,
@@ -14,7 +20,7 @@ impl TaskContext {
             s: [0; 12],
         }
     }
-    
+    /// 跳转到恢复上下文
     pub fn goto_restore(kstack_ptr: usize) -> Self {
         unsafe extern "C" { fn __pre_restore(); }
         Self {

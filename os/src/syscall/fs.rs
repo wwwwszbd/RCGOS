@@ -1,9 +1,38 @@
+/// 系统调用 `write` 的实现。
+///
+/// 该函数用于将用户空间缓冲区中的数据写入到指定的文件描述符中。
+/// 支持标准输出（`FD_STDOUT`）和其他文件描述符。
+///
+/// # 参数
+///
+/// - `fd`: 文件描述符，指定要写入的目标文件。
+/// - `buf`: 用户空间缓冲区的指针，包含要写入的数据。
+/// - `len`: 要写入的数据长度。
+///
+/// # 返回值
+///
+/// - 成功时返回写入的字节数。
+/// - 失败时返回 `-1`。
+
 use crate::config::*;
 use crate::task::get_current_task;
 use crate::loader::{USER_STACK, get_base_i};
 
 const FD_STDOUT: usize = 1;
 
+/// 检查用户空间缓冲区的地址是否合法。
+///
+/// 该函数用于检查用户空间缓冲区的地址是否在合法的范围内。
+/// 合法范围包括应用程序的内存空间和用户栈空间。
+///
+/// # 参数
+///
+/// - `slice`: 用户空间缓冲区的切片，包含要写入的数据。
+///
+/// # 返回值
+///
+/// - 成功时返回写入的字节数。
+/// - 失败时返回 `None`。
 fn check_addr(slice: &[u8]) -> Option<isize> {
     let task_id = get_current_task();
     let app_start = slice.as_ptr().addr();
@@ -17,7 +46,21 @@ fn check_addr(slice: &[u8]) -> Option<isize> {
         Some(app_size as isize)
     }
 }
-/// write buf of length `len`  to a file with `fd`
+/// 系统调用 `write` 的实现。
+///
+/// 该函数用于将用户空间缓冲区中的数据写入到指定的文件描述符中。
+/// 支持标准输出（`FD_STDOUT`）和其他文件描述符。
+///
+/// # 参数
+///
+/// - `fd`: 文件描述符，指定要写入的目标文件。
+/// - `buf`: 用户空间缓冲区的指针，包含要写入的数据。
+/// - `len`: 要写入的数据长度。
+///
+/// # 返回值
+///
+/// - 成功时返回写入的字节数。
+/// - 失败时返回 `-1`。
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     
     match fd {

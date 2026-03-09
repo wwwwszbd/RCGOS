@@ -71,7 +71,10 @@ fn main() -> i32 {
 }
 
 
-
+/// 清除 .bss 段
+/// 
+/// 此函数会将 .bss 段的内存区域清零。
+/// 它会遍历从 `start_bss` 到 `end_bss` 的内存地址，将每个字节设置为 0。
 // #![feature(panic_info_message)]
 fn clear_bss() {
     unsafe extern "C" {

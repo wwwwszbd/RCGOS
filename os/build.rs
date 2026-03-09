@@ -1,3 +1,9 @@
+/// 构建脚本
+/// 
+/// 此脚本负责在构建过程中执行一些额外的任务。
+/// 它会在 `src/link_app.S` 文件中插入应用程序的启动地址和结束地址。
+/// 这些地址会在 `loader.rs` 中被使用，用于加载应用程序到内存中。
+
 use std::fs::{File, read_dir};
 use std::io::{Result, Write};
 

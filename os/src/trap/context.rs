@@ -1,3 +1,7 @@
+/// 中断上下文
+/// 包含中断发生时的寄存器状态
+/// 以及中断处理完成后需要恢复的寄存器状态
+
 use riscv::register::sstatus::{self, SPP, Sstatus};
 
 #[repr(C)]

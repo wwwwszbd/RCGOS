@@ -1,8 +1,9 @@
 #![no_std]
 #![no_main]
-
+#![feature(alloc_error_handler)]
 #[macro_use]
 extern crate log;
+extern crate alloc;
 
 #[macro_use]
 mod console;
@@ -18,6 +19,7 @@ pub mod syscall;
 pub mod trap;
 
 mod timer;
+mod mm;
 
 #[path = "boards/qemu.rs"]
 mod boards;
@@ -56,6 +58,8 @@ pub fn rust_main() -> ! {
     clear_bss();
     logging::init();
     println!("[kernel] Hello, world!");
+    mm::heap_allocator::init_heap();
+    mm::heap_allocator::heap_test();
     trace!(
         "[kernel] .text [{:#x}, {:#x})",
         stext as *const () as usize, etext as *const () as usize

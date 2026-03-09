@@ -1,3 +1,5 @@
+/// 任务模块
+
 mod context;
 mod switch;
 
@@ -18,7 +20,7 @@ pub use context::TaskContext;
 pub static mut SWITCH_TIME_START: usize = 0;
 /// 切换的总时间
 pub static mut SWITCH_TIME_COUNT: usize = 0;
-
+/// 任务切换函数
 unsafe fn __switch(current_task_cx_ptr: *mut TaskContext, next_task_cx_ptr: *const TaskContext) {
     unsafe {
         SWITCH_TIME_START = get_time_us();
@@ -30,16 +32,18 @@ unsafe fn __switch(current_task_cx_ptr: *mut TaskContext, next_task_cx_ptr: *con
         SWITCH_TIME_COUNT += get_time_us() - SWITCH_TIME_START;
     }
 }
-
-fn get_switch_time_count() -> usize {
+/// 获取任务切换时间
+pub fn get_switch_time_count() -> usize {
     unsafe { SWITCH_TIME_COUNT }
 }
 
+/// 任务管理器
 pub struct TaskManager {
     num_app: usize,
     inner: UPSafeCell<TaskManagerInner>,
 }
 
+/// 任务管理器内部结构体
 struct TaskManagerInner {
     tasks: [TaskControlBlock; MAX_APP_NUM],
     current_task: usize,
@@ -51,31 +55,32 @@ lazy_static! {
         let num_app = get_num_app();
         let mut tasks = [
             TaskControlBlock {
-                task_cx: TaskContext::zero_init(),
-                task_status: TaskStatus::UnInit,
-                user_time: 0,
-                kernel_time: 0,
-                syscall_times: [0; MAX_SYSCALL_NUM],
-                first_schedule_time: 0,
+                task_cx: TaskContext::zero_init(),      // 任务上下文
+                task_status: TaskStatus::UnInit,        // 任务状态
+                user_time: 0,                           // 用户时间
+                kernel_time: 0,                         // 内核时间
+                syscall_times: [0; MAX_SYSCALL_NUM],    // 系统调用次数
+                first_schedule_time: 0,                 // 首次调度时间
             };
-            MAX_APP_NUM
+            MAX_APP_NUM                                 // 任务数量
         ];
         for i in 0..num_app {
             tasks[i].task_cx = TaskContext::goto_restore(init_app_cx(i));
             tasks[i].task_status = TaskStatus::Ready;
         }
         TaskManager {
-            num_app,
+            num_app,    // 任务数量
             inner: unsafe { UPSafeCell::new(TaskManagerInner {
-                tasks,
-                current_task: 0,
-                stop_watch: 0,
+                tasks,                                  // 任务数组
+                current_task: 0,                        // 当前任务索引
+                stop_watch: 0,                          // 计时器（用于统计时间）
             })},
         }
     };
 }
-
+/// 任务管理器内部方法
 impl TaskManagerInner {
+    /// 刷新停止watch
     fn refresh_stop_watch(&mut self) -> usize {
         let start_time = self.stop_watch;
         self.stop_watch = get_time_ms();
@@ -132,18 +137,18 @@ pub fn get_current_task() -> usize {
 }
 
 impl TaskManager {
-    
+    /// 获取当前任务索引
     fn get_current_task(&self) -> usize {
         let inner = self.inner.exclusive_access();
         inner.current_task
     }
-
+    /// 记录系统调用次数
     fn record_syscall_times(&self, syscall_id: usize) {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
         inner.tasks[current].syscall_times[syscall_id] += 1;
     }
-
+    /// 获取当前任务控制块
     fn get_current_task_block(&self) -> TaskControlBlock {
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
@@ -163,7 +168,7 @@ impl TaskManager {
         let current = inner.current_task;
         inner.tasks[current].kernel_time += inner.refresh_stop_watch();
     }
-
+    /// 运行第一个任务
     fn run_first_task(&self) -> ! {
         let mut inner = self.inner.exclusive_access();
         let task0 = &mut inner.tasks[0];
@@ -181,7 +186,7 @@ impl TaskManager {
         }
         panic!("unreachable in run_first_task!");
     }
-
+    /// 查找下一个可运行任务
     fn find_next_task(&self) -> Option<usize> {
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
@@ -191,7 +196,7 @@ impl TaskManager {
                 inner.tasks[*id].task_status == TaskStatus::Ready
             })
     }
-
+    /// 运行下一个任务
     fn run_next_task(&self) {
         if let Some(next) = self.find_next_task() {
             let mut inner = self.inner.exclusive_access();
@@ -211,21 +216,21 @@ impl TaskManager {
                     next_task_cx_ptr,
                 );
             }
-            // go back to user mode
+            // 回到用户模式
         } else {
             println!("All applications completed!");
             println!("task switch time: {} us", get_switch_time_count());
             shutdown(false);
         }
     }
-
+    /// 标记当前任务为挂起状态
     fn mark_current_suspended(&self) {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
         inner.tasks[current].kernel_time += inner.refresh_stop_watch();
         inner.tasks[current].task_status = TaskStatus::Ready;
     }
-
+    /// 标记当前任务为退出状态
     fn mark_current_exited(&self) {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;

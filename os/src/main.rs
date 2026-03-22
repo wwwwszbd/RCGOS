@@ -4,6 +4,7 @@
 #[macro_use]
 extern crate log;
 extern crate alloc;
+extern crate bitflags;
 
 #[macro_use]
 mod console;

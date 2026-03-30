@@ -13,7 +13,7 @@ pub const STDOUT: usize = 1;
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.entry")]
 pub extern "C" fn _start() -> ! {
-    clear_bss();
+    //clear_bss();
     exit(main());
     panic!("unreachable after sys_exit!");
 }
@@ -64,6 +64,10 @@ pub fn task_info(info: &mut TaskInfo) -> isize {
     sys_task_info(info)
 }
 
+pub fn sbrk(size: i32) -> isize {
+    sys_sbrk(size)
+}
+
 #[linkage = "weak"]
 #[unsafe(no_mangle)]
 fn main() -> i32 {
@@ -71,17 +75,3 @@ fn main() -> i32 {
 }
 
 
-/// 清除 .bss 段
-/// 
-/// 此函数会将 .bss 段的内存区域清零。
-/// 它会遍历从 `start_bss` 到 `end_bss` 的内存地址，将每个字节设置为 0。
-// #![feature(panic_info_message)]
-fn clear_bss() {
-    unsafe extern "C" {
-        fn start_bss();
-        fn end_bss();
-    }
-    (start_bss as *const () as usize..end_bss as *const () as usize).for_each(|addr| unsafe {
-        (addr as *mut u8).write_volatile(0);
-    });
-}

@@ -4,6 +4,7 @@
 #[macro_use]
 extern crate log;
 extern crate alloc;
+#[macro_use]
 extern crate bitflags;
 
 #[macro_use]
@@ -59,8 +60,6 @@ pub fn rust_main() -> ! {
     clear_bss();
     logging::init();
     println!("[kernel] Hello, world!");
-    mm::heap_allocator::init_heap();
-    mm::heap_allocator::heap_test();
     trace!(
         "[kernel] .text [{:#x}, {:#x})",
         stext as *const () as usize, etext as *const () as usize
@@ -83,8 +82,10 @@ pub fn rust_main() -> ! {
     // CI autotest failed : sbi::shutdown(true)
     //sbi::
     // shutdown(false)
+    mm::init();
+    info!("[kernel] back to world!");
+    mm::remap_test();
     trap::init();
-    loader::load_apps();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     task::run_first_task();

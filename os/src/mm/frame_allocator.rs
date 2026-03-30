@@ -55,12 +55,13 @@ lazy_static! {
 }
 
 pub fn init_frame_allocator() {
-    extern "C" {
-        fn ekernel();
+    unsafe extern "C" {
+        safe fn ekernel();
     }
     FRAME_ALLOCATOR
         .exclusive_access()
-        .init(PhysAddr::from(ekernel as usize).ceil(), PhysAddr::from(MEMORY_END).floor());
+        .init(PhysAddr::from(ekernel as *const () as usize).ceil(), 
+        PhysAddr::from(MEMORY_END).floor());
 }
 
 pub fn frame_alloc() -> Option<FrameTracker> {
@@ -76,6 +77,7 @@ pub fn frame_dealloc(ppn: PhysPageNum) {
         .dealloc(ppn);
 }
 
+#[derive(Clone)]
 pub struct FrameTracker {
     pub ppn: PhysPageNum,
 }
@@ -88,6 +90,12 @@ impl FrameTracker {
             *i = 0;
         }
         Self { ppn }
+    }
+}
+
+impl Debug for FrameTracker {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("FrameTracker:PPN={:#x}", self.ppn.0))
     }
 }
 

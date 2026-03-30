@@ -1,5 +1,5 @@
 /// 任务上下文
-
+use crate::trap::trap_return;
 
 /// 任务上下文结构体
 #[derive(Copy, Clone)]
@@ -21,10 +21,15 @@ impl TaskContext {
         }
     }
     /// 跳转到恢复上下文
-    pub fn goto_restore(kstack_ptr: usize) -> Self {
-        unsafe extern "C" { fn __pre_restore(); }
+    pub fn goto_trap_return(kstack_ptr: usize) -> Self {
+        // unsafe extern "C" { fn _restore(); }
+        // Self {
+        //     ra: _restore as *const () as usize,
+        //     sp: kstack_ptr,
+        //     s: [0; 12],
+        // }
         Self {
-            ra: __pre_restore as *const () as usize,
+            ra: trap_return as *const () as usize,
             sp: kstack_ptr,
             s: [0; 12],
         }

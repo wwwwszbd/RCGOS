@@ -6,10 +6,12 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::config::{MAX_APP_NUM, MAX_SYSCALL_NUM};
-use crate::loader::{get_num_app, init_app_cx};
+// use crate::config::{MAX_APP_NUM, MAX_SYSCALL_NUM};
+use crate::loader::{get_app_data, get_num_app};
 use crate::sbi::shutdown;
 use crate::sync::UPSafeCell;
+use crate::trap::TrapContext;
+use alloc::vec::Vec;
 use lazy_static::*;
 pub use task::{TaskControlBlock, TaskStatus};
 use crate::timer::get_time_ms;
@@ -45,28 +47,19 @@ pub struct TaskManager {
 
 /// 任务管理器内部结构体
 struct TaskManagerInner {
-    tasks: [TaskControlBlock; MAX_APP_NUM],
+    tasks: Vec<TaskControlBlock>,
     current_task: usize,
     stop_watch: usize,
 }
 
 lazy_static! {
     pub static ref TASK_MANAGER: TaskManager = {
+        println!("init TASK_MANAGER");
         let num_app = get_num_app();
-        let mut tasks = [
-            TaskControlBlock {
-                task_cx: TaskContext::zero_init(),      // 任务上下文
-                task_status: TaskStatus::UnInit,        // 任务状态
-                user_time: 0,                           // 用户时间
-                kernel_time: 0,                         // 内核时间
-                syscall_times: [0; MAX_SYSCALL_NUM],    // 系统调用次数
-                first_schedule_time: 0,                 // 首次调度时间
-            };
-            MAX_APP_NUM                                 // 任务数量
-        ];
+        println!("num_app = {}", num_app);
+        let mut tasks: Vec<TaskControlBlock> = Vec::new();
         for i in 0..num_app {
-            tasks[i].task_cx = TaskContext::goto_restore(init_app_cx(i));
-            tasks[i].task_status = TaskStatus::Ready;
+            tasks.push(TaskControlBlock::new(get_app_data(i), i));
         }
         TaskManager {
             num_app,    // 任务数量
@@ -136,6 +129,18 @@ pub fn get_current_task() -> usize {
     TASK_MANAGER.get_current_task()
 }
 
+pub fn current_user_token() -> usize {
+    TASK_MANAGER.get_current_token()
+}
+
+pub fn current_trap_cx() -> &'static mut TrapContext {
+    TASK_MANAGER.get_current_trap_cx()
+}
+
+pub fn change_program_brk(size: i32) -> Option<usize> {
+    TASK_MANAGER.change_current_program_brk(size)
+}
+
 impl TaskManager {
     /// 获取当前任务索引
     fn get_current_task(&self) -> usize {
@@ -152,7 +157,7 @@ impl TaskManager {
     fn get_current_task_block(&self) -> TaskControlBlock {
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        inner.tasks[current]
+        inner.tasks[current].clone()
     }
 
     /// 统计内核时间，从现在开始算的是用户时间
@@ -168,6 +173,26 @@ impl TaskManager {
         let current = inner.current_task;
         inner.tasks[current].kernel_time += inner.refresh_stop_watch();
     }
+
+    /// Get the current 'Running' task's token.
+    fn get_current_token(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].get_user_token()
+    }
+
+    /// Get the current 'Running' task's trap contexts.
+    fn get_current_trap_cx(&self) -> &'static mut TrapContext {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].get_trap_cx()
+    }
+
+    /// Change the current 'Running' task's program break
+    pub fn change_current_program_brk(&self, size: i32) -> Option<usize> {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].change_program_brk(size)
+    }
+
     /// 运行第一个任务
     fn run_first_task(&self) -> ! {
         let mut inner = self.inner.exclusive_access();

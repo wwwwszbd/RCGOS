@@ -1,8 +1,9 @@
 cargo:rerun-if-changed=../user/src/
 cargo:rerun-if-changed=../user/target/riscv64gc-unknown-none-elf/release/
-app_0: 00write_a
-app_1: 01store_fault
-app_2: 01write_b
-app_3: 02power
-app_4: 02write_c
-app_5: 03priv_inst
+app_0: 00power_3
+app_1: 01power_5
+app_2: 02power_7
+app_3: 03sleep
+app_4: 04load_fault
+app_5: 05store_fault
+app_6: sbrk_test

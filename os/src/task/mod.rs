@@ -6,7 +6,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-// use crate::config::{MAX_APP_NUM, MAX_SYSCALL_NUM};
+use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
 use crate::sbi::shutdown;
 use crate::sync::UPSafeCell;
@@ -121,6 +121,18 @@ pub fn get_current_task_block() -> TaskControlBlock {
     TASK_MANAGER.get_current_task_block()
 }
 
+#[derive(Copy, Clone)]
+pub struct TaskSnapshot {
+    pub id: usize,
+    pub status: TaskStatus,
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+    pub time_ms: usize,
+}
+
+pub fn get_task_snapshot(id: usize) -> Option<TaskSnapshot> {
+    TASK_MANAGER.get_task_snapshot(id)
+}
+
 pub fn record_syscall_times(syscall_id: usize) {
     TASK_MANAGER.record_syscall_times(syscall_id);
 }
@@ -151,13 +163,34 @@ impl TaskManager {
     fn record_syscall_times(&self, syscall_id: usize) {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        inner.tasks[current].syscall_times[syscall_id] += 1;
+        if syscall_id < MAX_SYSCALL_NUM {
+            inner.tasks[current].syscall_times[syscall_id] += 1;
+        }
     }
     /// 获取当前任务控制块
     fn get_current_task_block(&self) -> TaskControlBlock {
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
         inner.tasks[current].clone()
+    }
+
+    fn get_task_snapshot(&self, id: usize) -> Option<TaskSnapshot> {
+        let inner = self.inner.exclusive_access();
+        if id >= inner.tasks.len() {
+            return None;
+        }
+        let task = &inner.tasks[id];
+        let time_ms = if task.first_schedule_time == 0 {
+            0
+        } else {
+            get_time_ms().saturating_sub(task.first_schedule_time)
+        };
+        Some(TaskSnapshot {
+            id,
+            status: task.task_status,
+            syscall_times: task.syscall_times,
+            time_ms,
+        })
     }
 
     /// 统计内核时间，从现在开始算的是用户时间

@@ -20,6 +20,7 @@ const SYSCALL_EXIT: usize = 93;
 const SYSCALL_YIELD: usize = 124;
 const SYSCALL_GET_TIME: usize = 169;
 const SYSCALL_TASK_INFO: usize = 410;
+const SYSCALL_GET_TASK_ID: usize = 411;
 const SYSCALL_SBRK: usize = 214;
 
 pub fn sys_write(fd: usize, buffer: &[u8]) -> isize {
@@ -38,8 +39,12 @@ pub fn sys_get_time() -> isize {
     syscall(SYSCALL_GET_TIME, [0, 0, 0])
 }
 
-pub fn sys_task_info(info: &mut TaskInfo) -> isize {
-    syscall(SYSCALL_TASK_INFO, [info as *const _ as usize, 0, 0])
+pub fn sys_task_info(id: usize, info: *mut TaskInfo) -> isize {
+    syscall(SYSCALL_TASK_INFO, [id, info as usize, 0])
+}
+
+pub fn sys_get_task_id() -> isize {
+    syscall(SYSCALL_GET_TASK_ID, [0, 0, 0])
 }
 
 pub fn sys_sbrk(size: i32) -> isize {

@@ -18,6 +18,7 @@ pub extern "C" fn _start() -> ! {
     panic!("unreachable after sys_exit!");
 }
 
+#[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum TaskStatus {
     UnInit,
@@ -28,18 +29,28 @@ pub enum TaskStatus {
 
 const MAX_SYSCALL_NUM: usize = 500;
 
-#[derive(Debug)]
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct SyscallInfo {
+    pub id: usize,
+    pub times: usize,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
 pub struct TaskInfo {
+    pub id: usize,
     pub status: TaskStatus,
-    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+    pub call: [SyscallInfo; MAX_SYSCALL_NUM],
     pub time: usize,
 }
 
 impl TaskInfo {
     pub fn new() -> Self {
         TaskInfo {
+            id: 0,
             status: TaskStatus::UnInit,
-            syscall_times: [0; MAX_SYSCALL_NUM],
+            call: core::array::from_fn(|i| SyscallInfo { id: i, times: 0 }),
             time: 0,
         }
     }
@@ -60,8 +71,16 @@ pub fn get_time() -> isize {
     sys_get_time()
 }
 
-pub fn task_info(info: &mut TaskInfo) -> isize {
-    sys_task_info(info)
+pub fn get_task_id() -> isize {
+    sys_get_task_id()
+}
+
+pub fn task_info_ptr(id: usize, info: *mut TaskInfo) -> isize {
+    sys_task_info(id, info)
+}
+
+pub fn task_info(id: usize, info: &mut TaskInfo) -> isize {
+    task_info_ptr(id, info as *mut TaskInfo)
 }
 
 pub fn sbrk(size: i32) -> isize {
@@ -73,5 +92,3 @@ pub fn sbrk(size: i32) -> isize {
 fn main() -> i32 {
     panic!("Cannot find main!");
 }
-
-

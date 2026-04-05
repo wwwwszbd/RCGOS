@@ -3,7 +3,9 @@ cargo:rerun-if-changed=../user/target/riscv64gc-unknown-none-elf/release/
 app_0: 00power_3
 app_1: 01power_5
 app_2: 02power_7
-app_3: 03sleep
+app_3: 03priv_inst
 app_4: 04load_fault
 app_5: 05store_fault
-app_6: sbrk_test
+app_6: 06sbrk_test
+app_7: 07task_info
+app_8: ch3_taskinfo

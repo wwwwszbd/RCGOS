@@ -90,6 +90,7 @@ impl TaskControlBlock {
 
 }
 
+#[repr(u8)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum TaskStatus {
     UnInit, // 未初始化

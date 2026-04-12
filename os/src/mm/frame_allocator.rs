@@ -119,7 +119,7 @@ trait FrameAllocator {
 }
 
 #[allow(unused)]
-/// a simple test for frame allocator
+/// 帧分配器自检。
 pub fn frame_allocator_test() {
     let mut v: Vec<FrameTracker> = Vec::new();
     for i in 0..5 {

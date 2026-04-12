@@ -7,6 +7,11 @@ pub fn console_putchar(c: usize) {
     sbi_rt::legacy::console_putchar(c);
 }
 
+pub fn console_getchar() -> usize {
+    #[allow(deprecated)]
+    sbi_rt::legacy::console_getchar()
+}
+
 // 关机功能
 pub fn shutdown(failure: bool) -> ! {
     if !failure {

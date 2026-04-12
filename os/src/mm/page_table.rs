@@ -1,4 +1,5 @@
-use super::{FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum, frame_alloc};
+use super::{FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum, frame_alloc};
+use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -56,8 +57,7 @@ pub struct PageTable {
     root_ppn: PhysPageNum,
     frames: Vec<FrameTracker>,
 }
-/// 目前的实现方式并不打算对物理页帧耗尽的情形做任何处理而是直接 panic 退出。
-/// 因此在前面的代码中能够看到很多 unwrap ，这种使用方式并不为 Rust 所推荐，只是由于简单起见暂且这样做。
+// 该实现对“物理页帧耗尽”采取直接 panic 的策略，因此部分路径使用 unwrap 简化处理。
 impl PageTable {
     pub fn new() -> Self {
         let frame = frame_alloc().unwrap();
@@ -124,11 +124,23 @@ impl PageTable {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.find_pte(vpn).map(|pte| *pte)
     }
+    pub fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
+        self.find_pte(va.floor()).map(|pte| {
+            let aligned_pa: PhysAddr = pte.ppn().into();
+            let offset = va.page_offset();
+            let aligned_pa_usize: usize = aligned_pa.into();
+            (aligned_pa_usize + offset).into()
+        })
+    }
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
     }
 }
 
+/// 将用户空间 `[ptr, ptr + len)` 翻译为若干段可写的内核切片。
+///
+/// # Panics
+/// - 若区间中存在未映射页，会 panic。
 pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
     let page_table = PageTable::from_token(token);
     let mut start = ptr as usize;
@@ -151,6 +163,10 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     v
 }
 
+/// 将用户空间 `[ptr, ptr + len)` 翻译为若干段可写的内核切片。
+///
+/// # Errors
+/// - 若区间中存在未映射页，返回 `None`。
 pub fn translated_byte_buffer_checked(
     token: usize,
     ptr: *const u8,
@@ -178,4 +194,43 @@ pub fn translated_byte_buffer_checked(
         start = end_va.into();
     }
     Some(v)
+}
+
+/// 将用户空间的 `\0` 结尾字符串翻译为内核 `String`。
+///
+/// # Panics
+/// - 若字符串访问到未映射页，会 panic。
+pub fn translated_str(token: usize, ptr: *const u8) -> String {
+    let page_table = PageTable::from_token(token);
+    let mut string = String::new();
+    let mut va = ptr as usize;
+    loop {
+        let ch: u8 = *(page_table
+            .translate_va(VirtAddr::from(va))
+            .unwrap()
+            .get_mut());
+        if ch == 0 {
+            break;
+        } else {
+            string.push(ch as char);
+            va += 1;
+        }
+    }
+    string
+}
+
+/// 将用户空间指针翻译为内核可写引用。
+///
+/// # Safety
+/// 调用方需保证 `ptr` 在用户地址空间内可写且满足 `T` 的对齐要求。
+///
+/// # Panics
+/// - 若 `ptr` 所在页未映射，会 panic。
+pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
+    let page_table = PageTable::from_token(token);
+    let va = ptr as usize;
+    page_table
+        .translate_va(VirtAddr::from(va))
+        .unwrap()
+        .get_mut()
 }

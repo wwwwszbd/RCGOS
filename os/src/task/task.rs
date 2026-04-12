@@ -1,100 +1,156 @@
 use super::TaskContext;
-use crate::config::{TRAP_CONTEXT, MAX_SYSCALL_NUM, kernel_stack_position};
-use crate::mm::{KERNEL_SPACE, MapPermission, MemorySet, PhysPageNum, VirtAddr};
+use super::{KernelStack, PidHandle, pid_alloc};
+use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT};
+use crate::mm::{KERNEL_SPACE, MemorySet, PhysPageNum, VirtAddr};
+use crate::sync::UPSafeCell;
 use crate::trap::{TrapContext, trap_handler};
+use alloc::sync::{Arc, Weak};
+use alloc::vec::Vec;
+use core::cell::RefMut;
 
-// #[derive(Copy, Clone)]
-#[derive(Clone)]
 pub struct TaskControlBlock {
-    pub task_status: TaskStatus,
-    pub task_cx: TaskContext,
-    pub user_time: usize,
-    pub kernel_time: usize, 
-    pub syscall_times: [u32; MAX_SYSCALL_NUM],
-    pub first_schedule_time: usize,
-    pub memory_set: MemorySet,
-    pub trap_cx_ppn: PhysPageNum,
-    #[allow(unused)]
-    pub base_size: usize,
-    pub heap_bottom: usize,
-    pub program_brk: usize,
+    pub pid: PidHandle,
+    pub kernel_stack: KernelStack,
+    inner: UPSafeCell<TaskControlBlockInner>,
 }
 
-impl TaskControlBlock {
+pub struct TaskControlBlockInner {
+    pub trap_cx_ppn: PhysPageNum,
+    pub base_size: usize,
+    pub task_cx: TaskContext,
+    pub task_status: TaskStatus,
+    pub memory_set: MemorySet,
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+    pub first_schedule_time: usize,
+    pub heap_bottom: usize,
+    pub program_brk: usize,
+    pub parent: Option<Weak<TaskControlBlock>>,
+    pub children: Vec<Arc<TaskControlBlock>>,
+    pub exit_code: i32,
+}
+
+impl TaskControlBlockInner {
     pub fn get_trap_cx(&self) -> &'static mut TrapContext {
         self.trap_cx_ppn.get_mut()
     }
     pub fn get_user_token(&self) -> usize {
         self.memory_set.token()
     }
-    pub fn new(elf_data: &[u8], app_id: usize) -> Self {
-        // memory_set with elf program headers/trampoline/trap context/user stack
+    pub fn is_zombie(&self) -> bool {
+        self.task_status == TaskStatus::Zombie
+    }
+}
+
+impl TaskControlBlock {
+    pub fn inner_exclusive_access(&self) -> RefMut<'_, TaskControlBlockInner> {
+        self.inner.exclusive_access()
+    }
+    pub fn new(elf_data: &[u8]) -> Self {
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         let trap_cx_ppn = memory_set
             .translate(VirtAddr::from(TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
-        let task_status = TaskStatus::Ready;
-        // map a kernel-stack in kernel space
-        let (kernel_stack_bottom, kernel_stack_top) = kernel_stack_position(app_id);
-        KERNEL_SPACE.exclusive_access().insert_framed_area(
-            kernel_stack_bottom.into(),
-            kernel_stack_top.into(),
-            MapPermission::R | MapPermission::W,
-        );
+        let pid_handle = pid_alloc();
+        let kernel_stack = KernelStack::new(&pid_handle);
+        let kernel_stack_top = kernel_stack.get_top();
         let task_control_block = Self {
-            task_status,
-            task_cx: TaskContext::goto_trap_return(kernel_stack_top),
-            user_time: 0,
-            kernel_time: 0,
-            syscall_times: [0; MAX_SYSCALL_NUM],
-            first_schedule_time: 0,
-            memory_set,
-            trap_cx_ppn,
-            base_size: user_sp,
-            heap_bottom: user_sp,
-            program_brk: user_sp,
+            pid: pid_handle,
+            kernel_stack,
+            inner: unsafe {
+                UPSafeCell::new(TaskControlBlockInner {
+                    trap_cx_ppn,
+                    base_size: user_sp,
+                    task_cx: TaskContext::goto_trap_return(kernel_stack_top),
+                    task_status: TaskStatus::Ready,
+                    memory_set,
+                    syscall_times: [0; MAX_SYSCALL_NUM],
+                    first_schedule_time: 0,
+                    heap_bottom: user_sp,
+                    program_brk: user_sp,
+                    parent: None,
+                    children: Vec::new(),
+                    exit_code: 0,
+                })
+            },
         };
-        // prepare TrapContext in user space
-        let trap_cx = task_control_block.get_trap_cx();
+        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
             KERNEL_SPACE.exclusive_access().token(),
             kernel_stack_top,
-            trap_handler as *const () as usize,
+            trap_handler as usize,
         );
         task_control_block
     }
-    /// change the location of the program break. return None if failed.
-    pub fn change_program_brk(&mut self, size: i32) -> Option<usize> {
-        let old_break = self.program_brk;
-        let new_brk = self.program_brk as isize + size as isize;
-        if new_brk < self.heap_bottom as isize {
-            return None;
-        }
-        let result = if size < 0 {
-            self.memory_set
-                .shrink_to(VirtAddr(self.heap_bottom), VirtAddr(new_brk as usize))
-        } else {
-            self.memory_set
-                .append_to(VirtAddr(self.heap_bottom), VirtAddr(new_brk as usize))
-        };
-        if result {
-            self.program_brk = new_brk as usize;
-            Some(old_break)
-        } else {
-            None
-        }
+    pub fn exec(&self, elf_data: &[u8]) {
+        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        let trap_cx_ppn = memory_set
+            .translate(VirtAddr::from(TRAP_CONTEXT).into())
+            .unwrap()
+            .ppn();
+        let mut inner = self.inner_exclusive_access();
+        inner.memory_set = memory_set;
+        inner.trap_cx_ppn = trap_cx_ppn;
+        inner.base_size = user_sp;
+        inner.heap_bottom = user_sp;
+        inner.program_brk = user_sp;
+        let trap_cx = inner.get_trap_cx();
+        *trap_cx = TrapContext::app_init_context(
+            entry_point,
+            user_sp,
+            KERNEL_SPACE.exclusive_access().token(),
+            self.kernel_stack.get_top(),
+            trap_handler as usize,
+        );
     }
-
+    pub fn fork(self: &Arc<Self>) -> Arc<Self> {
+        let mut parent_inner = self.inner_exclusive_access();
+        let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
+        let trap_cx_ppn = memory_set
+            .translate(VirtAddr::from(TRAP_CONTEXT).into())
+            .unwrap()
+            .ppn();
+        let pid_handle = pid_alloc();
+        let kernel_stack = KernelStack::new(&pid_handle);
+        let kernel_stack_top = kernel_stack.get_top();
+        let child = Arc::new(TaskControlBlock {
+            pid: pid_handle,
+            kernel_stack,
+            inner: unsafe {
+                UPSafeCell::new(TaskControlBlockInner {
+                    trap_cx_ppn,
+                    base_size: parent_inner.base_size,
+                    task_cx: TaskContext::goto_trap_return(kernel_stack_top),
+                    task_status: TaskStatus::Ready,
+                    memory_set,
+                    syscall_times: [0; MAX_SYSCALL_NUM],
+                    first_schedule_time: 0,
+                    heap_bottom: parent_inner.heap_bottom,
+                    program_brk: parent_inner.program_brk,
+                    parent: Some(Arc::downgrade(self)),
+                    children: Vec::new(),
+                    exit_code: 0,
+                })
+            },
+        });
+        parent_inner.children.push(child.clone());
+        let trap_cx = child.inner_exclusive_access().get_trap_cx();
+        trap_cx.kernel_sp = kernel_stack_top;
+        child
+    }
+    pub fn getpid(&self) -> usize {
+        self.pid.0
+    }
 }
 
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum TaskStatus {
-    UnInit, // 未初始化
-    Ready, // 准备运行
-    Running, // 正在运行
-    Exited, // 已退出
+    UnInit,
+    Ready,
+    Running,
+    Exited,
+    Zombie,
 }

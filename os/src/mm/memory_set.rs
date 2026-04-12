@@ -54,7 +54,7 @@ impl MemorySet {
         }
         self.areas.push(map_area);
     }
-    /// Assume that no conflicts.
+    /// 插入一段新的页映射区域（默认认为不冲突）。
     pub fn insert_framed_area(
         &mut self,
         start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission
@@ -65,6 +65,18 @@ impl MemorySet {
             MapType::Framed,
             permission,
         ), None);
+    }
+
+    pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
+        if let Some((idx, area)) = self
+            .areas
+            .iter_mut()
+            .enumerate()
+            .find(|(_, area)| area.vpn_range.get_start() == start_vpn)
+        {
+            area.unmap(&mut self.page_table);
+            self.areas.remove(idx);
+        }
     }
     pub fn new_kernel() -> Self {
         let mut memory_set = Self::new_bare();
@@ -124,8 +136,7 @@ impl MemorySet {
         }
         memory_set
     }
-    /// Include sections in elf and trampoline and TrapContext and user stack,
-    /// also returns user_sp and entry point.
+    /// 从 ELF 构建用户地址空间，并返回用户栈顶与入口地址。
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
         let mut memory_set = Self::new_bare();
         // map trampoline
@@ -181,6 +192,23 @@ impl MemorySet {
         ), None);
         (memory_set, user_stack_top, elf.header.pt2.entry_point() as usize)
     }
+
+    pub fn from_existed_user(user_space: &Self) -> Self {
+        let mut memory_set = Self::new_bare();
+        memory_set.map_trampoline();
+        for area in user_space.areas.iter() {
+            let new_area = MapArea::from_another(area);
+            memory_set.push(new_area, None);
+            for vpn in area.vpn_range {
+                let src_ppn = user_space.translate(vpn).unwrap().ppn();
+                let dst_ppn = memory_set.translate(vpn).unwrap().ppn();
+                dst_ppn
+                    .get_bytes_array()
+                    .copy_from_slice(src_ppn.get_bytes_array());
+            }
+        }
+        memory_set
+    }
     pub fn activate(&self) {
         let satp = self.page_table.token();
         unsafe {
@@ -225,6 +253,11 @@ impl MemorySet {
             false
         }
     }
+    ///Remove all `MapArea`
+    pub fn recycle_data_pages(&mut self) {
+        //*self = Self::new_bare();
+        self.areas.clear();
+    }
 }
 
 #[derive(Clone)]
@@ -251,6 +284,14 @@ impl MapArea {
             map_perm,
         }
     }
+    pub fn from_another(another: &Self) -> Self {
+        Self {
+            vpn_range: VPNRange::new(another.vpn_range.get_start(), another.vpn_range.get_end()),
+            data_frames: BTreeMap::new(),
+            map_type: another.map_type,
+            map_perm: another.map_perm,
+        }
+    }
     pub fn map(&mut self, page_table: &mut PageTable) {
         for vpn in self.vpn_range {
             self.map_one(page_table, vpn);
@@ -261,8 +302,7 @@ impl MapArea {
             self.unmap_one(page_table, vpn);
         }
     }
-    /// data: start-aligned but maybe with shorter length
-    /// assume that all frames were cleared before
+    /// 将 `data` 拷贝到已映射的 Framed 区域中（按页拷贝）。
     pub fn copy_data(&mut self, page_table: &PageTable, data: &[u8]) {
         assert_eq!(self.map_type, MapType::Framed);
         let mut start: usize = 0;

@@ -1,12 +1,13 @@
-/// 系统调用实现
+//! 进程与任务相关系统调用。
+use alloc::sync::Arc;
 
 use crate::{
     config::MAX_SYSCALL_NUM,
-    mm::{translated_byte_buffer, translated_byte_buffer_checked},
-    task::{current_user_token, change_program_brk, exit_current_and_run_next, get_task_snapshot, get_current_task, suspend_current_and_run_next, TaskStatus},
+    loader::get_app_data_by_name,
+    mm::{translated_byte_buffer, translated_byte_buffer_checked, translated_refmut, translated_str},
+    task::{add_task, change_program_brk, current_task, current_user_token, exit_current_and_run_next, get_task_snapshot, suspend_current_and_run_next, TaskStatus},
     timer::{get_time_us, get_time_ms},
 };
-// use log::*;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -15,7 +16,7 @@ pub struct TimeVal {
     pub usec: usize,
 }
 
-/// 任务描述信息
+/// 系统调用统计条目。
 #[allow(dead_code)]
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -28,18 +29,18 @@ pub struct SyscallInfo {
 #[derive(Copy, Clone)]
 pub struct TaskInfo {
     pub id: usize,
-    /// 任务状态在生命周期中的状态
+    /// 任务状态。
     pub status: TaskStatus,
-    /// 任务调用的系统调用次数（每个 syscall 对应一个条目）
+    /// 系统调用统计（每个 syscall 对应一个条目）。
     pub call: [SyscallInfo; MAX_SYSCALL_NUM],
-    /// 任务运行的总时间（单位：毫秒）
+    /// 运行时间（单位：毫秒）。
     pub time: usize,
 }
 
-/// 任务退出并提交退出码
+/// 退出当前任务并切换到下一个任务。
 pub fn sys_exit(exit_code: i32) -> ! {
     println!("[kernel] Application exited with code {}", exit_code);
-    exit_current_and_run_next();
+    exit_current_and_run_next(exit_code);
     panic!("Unreachable in sys_exit!");
 }
 
@@ -48,12 +49,9 @@ pub fn sys_yield() -> isize {
     0
 }
 
-// pub fn sys_get_time() -> isize {
-//     get_time_us() as isize
-// }
 pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     if ts.is_null() {
-        return get_time_us() as isize;
+        return get_time_ms() as isize;
     }
     let token = current_user_token();
     let time_val = TimeVal {
@@ -61,10 +59,13 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
         usec: (get_time_ms() % 1000) * 1000,
     };
     
-    // 使用translated_byte_buffer将时间值写回用户空间
-    let buffers = translated_byte_buffer(token, ts as *const u8, core::mem::size_of::<TimeVal>());
+    let Some(buffers) =
+        translated_byte_buffer_checked(token, ts as *const u8, core::mem::size_of::<TimeVal>())
+    else {
+        return -1;
+    };
     if buffers.is_empty() {
-        panic!("sys_get_time: buffers is null");
+        return -1;
     }
     let time_val_bytes = unsafe {
         core::slice::from_raw_parts(
@@ -83,7 +84,7 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
         offset += len;
     }
     
-    0
+    if offset == time_val_bytes.len() { 0 } else { -1 }
 }
 
 pub fn sys_task_info(id: usize, ti: *mut TaskInfo) -> isize {
@@ -157,7 +158,7 @@ pub fn sys_task_info(id: usize, ti: *mut TaskInfo) -> isize {
 }
 
 pub fn sys_get_task_id() -> isize {
-    get_current_task() as isize
+    current_task().unwrap().getpid() as isize
 }
 
 pub fn sys_sbrk(size: i32) -> isize {
@@ -165,5 +166,61 @@ pub fn sys_sbrk(size: i32) -> isize {
         old_brk as isize
     } else {
         -1
+    }
+}
+
+pub fn sys_getpid() -> isize {
+    current_task().unwrap().pid.0 as isize
+}
+
+pub fn sys_fork() -> isize {
+    let current_task = current_task().unwrap();
+    let new_task = current_task.fork();
+    let new_pid = new_task.pid.0;
+    let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
+    trap_cx.x[10] = 0;
+    add_task(new_task);
+    new_pid as isize
+}
+
+pub fn sys_exec(path: *const u8) -> isize {
+    let token = current_user_token();
+    let path = translated_str(token, path);
+    if let Some(data) = get_app_data_by_name(path.as_str()) {
+        let task = current_task().unwrap();
+        task.exec(data);
+        0
+    } else {
+        -1
+    }
+}
+
+/// 等待子进程退出并回收资源。
+///
+/// # Errors
+/// - 返回 -1：不存在满足条件的子进程。
+/// - 返回 -2：存在满足条件的子进程，但尚未退出。
+pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    if !inner
+        .children
+        .iter()
+        .any(|p| pid == -1 || pid as usize == p.getpid())
+    {
+        return -1;
+    }
+    let pair = inner.children.iter().enumerate().find(|(_, p)| {
+        p.inner_exclusive_access().is_zombie() && (pid == -1 || pid as usize == p.getpid())
+    });
+    if let Some((idx, _)) = pair {
+        let child = inner.children.remove(idx);
+        assert_eq!(Arc::strong_count(&child), 1);
+        let found_pid = child.getpid();
+        let exit_code = child.inner_exclusive_access().exit_code;
+        *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
+        found_pid as isize
+    } else {
+        -2
     }
 }

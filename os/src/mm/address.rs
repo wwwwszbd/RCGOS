@@ -1,32 +1,32 @@
-//! Implementation of physical and virtual address and page number.
+//! 地址与页号类型定义。
 
 use super::PageTableEntry;
 use crate::config::{PAGE_SIZE, PAGE_SIZE_BITS};
 use core::fmt::{self, Debug, Formatter};
 
-/// physical address
+/// 物理地址。
 const PA_WIDTH_SV39: usize = 56;
 const VA_WIDTH_SV39: usize = 39;
 const PPN_WIDTH_SV39: usize = PA_WIDTH_SV39 - PAGE_SIZE_BITS;
 const VPN_WIDTH_SV39: usize = VA_WIDTH_SV39 - PAGE_SIZE_BITS;
 
-/// Definitions
+/// 类型定义。
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct PhysAddr(pub usize);
 
-/// virtual address
+/// 虚拟地址。
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct VirtAddr(pub usize);
 
-/// physical page number
+/// 物理页号。
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct PhysPageNum(pub usize);
 
-/// virtual page number
+/// 虚拟页号。
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct VirtPageNum(pub usize);
 
-/// Debugging
+/// 调试输出。
 
 impl Debug for VirtAddr {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -49,9 +49,7 @@ impl Debug for PhysPageNum {
     }
 }
 
-/// T: {PhysAddr, VirtAddr, PhysPageNum, VirtPageNum}
-/// T -> usize: T.0
-/// usize -> T: usize.into()
+/// 约定：`T` 为 `PhysAddr/VirtAddr/PhysPageNum/VirtPageNum` 之一，`T.0` 表示其内部整数值。
 
 impl From<usize> for PhysAddr {
     fn from(v: usize) -> Self {
@@ -184,6 +182,12 @@ impl PhysPageNum {
     }
 }
 
+impl PhysAddr {
+    pub fn get_mut<T>(&self) -> &'static mut T {
+        unsafe { (self.0 as *mut T).as_mut().unwrap() }
+    }
+}
+
 pub trait StepByOne {
     fn step(&mut self);
 }
@@ -194,7 +198,7 @@ impl StepByOne for VirtPageNum {
 }
 
 #[derive(Copy, Clone)]
-/// a simple range structure for type T
+/// 简单区间结构（左闭右开）。
 pub struct SimpleRange<T>
 where
     T: StepByOne + Copy + PartialEq + PartialOrd + Debug,
@@ -227,7 +231,7 @@ where
         SimpleRangeIterator::new(self.l, self.r)
     }
 }
-/// iterator for the simple range structure
+/// 区间迭代器。
 pub struct SimpleRangeIterator<T>
 where
     T: StepByOne + Copy + PartialEq + PartialOrd + Debug,
@@ -259,5 +263,5 @@ where
     }
 }
 
-/// a simple range structure for virtual page number
+/// 虚拟页号区间。
 pub type VPNRange = SimpleRange<VirtPageNum>;

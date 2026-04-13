@@ -14,7 +14,7 @@ use crate::mm::VirtAddr;
 use alloc::sync::Arc;
 pub use context::TaskContext;
 pub use manager::{add_task, fetch_task};
-pub use pid::{KernelStack, PidAllocator, PidHandle, pid_alloc};
+pub use pid::{KernelStack, PidHandle, pid_alloc};
 pub use processor::{
     current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task,
 };
@@ -118,10 +118,6 @@ pub fn get_task_snapshot(pid: usize) -> Option<TaskSnapshot> {
         syscall_times: inner.syscall_times,
         time_ms,
     })
-}
-
-pub fn get_switch_time_count() -> usize {
-    0
 }
 
 pub fn shutdown_if_no_tasks() -> ! {

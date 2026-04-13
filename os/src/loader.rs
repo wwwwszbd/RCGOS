@@ -3,7 +3,7 @@ use lazy_static::*;
 
 pub fn get_num_app() -> usize {
     unsafe extern "C" {
-        safe fn _num_app();
+        fn _num_app();
     }
     unsafe { (_num_app as *const () as usize as *const usize).read_volatile() }
 }
@@ -11,7 +11,7 @@ pub fn get_num_app() -> usize {
 /// 获取指定应用的二进制数据切片。
 pub fn get_app_data(app_id: usize) -> &'static [u8] {
     unsafe extern "C" {
-        safe fn _num_app();
+        fn _num_app();
     }
     let num_app_ptr = _num_app as *const () as usize as *const usize;
     let num_app = get_num_app();
@@ -30,9 +30,9 @@ lazy_static! {
     static ref APP_NAMES: Vec<&'static str> = {
         let num_app = get_num_app();
         unsafe extern "C" {
-            safe fn _app_names();
+            fn _app_names();
         }
-        let mut start = _app_names as usize as *const u8;
+        let mut start = _app_names as *const () as usize as *const u8;
         let mut v = Vec::new();
         unsafe {
             for _ in 0..num_app {

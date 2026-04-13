@@ -4,9 +4,9 @@ use alloc::sync::Arc;
 use crate::{
     config::MAX_SYSCALL_NUM,
     loader::get_app_data_by_name,
-    mm::{translated_byte_buffer, translated_byte_buffer_checked, translated_refmut, translated_str},
+    mm::{translated_byte_buffer_checked, translated_refmut, translated_str},
     task::{add_task, change_program_brk, current_task, current_user_token, exit_current_and_run_next, get_task_snapshot, suspend_current_and_run_next, TaskStatus},
-    timer::{get_time_us, get_time_ms},
+    timer::get_time_ms,
 };
 
 #[repr(C)]

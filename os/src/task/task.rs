@@ -24,6 +24,7 @@ pub struct TaskControlBlockInner {
     pub first_schedule_time: usize,
     pub heap_bottom: usize,
     pub program_brk: usize,
+    #[allow(dead_code)]
     pub parent: Option<Weak<TaskControlBlock>>,
     pub children: Vec<Arc<TaskControlBlock>>,
     pub exit_code: i32,
@@ -80,7 +81,7 @@ impl TaskControlBlock {
             user_sp,
             KERNEL_SPACE.exclusive_access().token(),
             kernel_stack_top,
-            trap_handler as usize,
+            trap_handler as *const () as usize,
         );
         task_control_block
     }
@@ -102,7 +103,7 @@ impl TaskControlBlock {
             user_sp,
             KERNEL_SPACE.exclusive_access().token(),
             self.kernel_stack.get_top(),
-            trap_handler as usize,
+            trap_handler as *const () as usize,
         );
     }
     pub fn fork(self: &Arc<Self>) -> Arc<Self> {
@@ -147,6 +148,7 @@ impl TaskControlBlock {
 
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum TaskStatus {
     UnInit,
     Ready,

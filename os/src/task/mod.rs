@@ -7,11 +7,12 @@ mod switch;
 mod task;
 
 use crate::config::MAX_SYSCALL_NUM;
-use crate::loader::{get_app_data_by_name, list_apps};
+use crate::fs::{OpenFlags, list_apps, open_file};
 use crate::sbi::shutdown;
 use crate::timer::get_time_ms;
 use crate::mm::VirtAddr;
 use alloc::sync::Arc;
+use lazy_static::lazy_static;
 pub use context::TaskContext;
 pub use manager::{add_task, fetch_task};
 pub use pid::{KernelStack, PidHandle, pid_alloc};
@@ -22,10 +23,9 @@ pub use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub fn run_first_task() -> ! {
-    let initproc = get_app_data_by_name("initproc").unwrap();
-    add_task(Arc::new(TaskControlBlock::new(initproc)));
     println!("after initproc!");
     list_apps();
+    add_initproc();
     run_tasks()
 }
 
@@ -122,4 +122,17 @@ pub fn get_task_snapshot(pid: usize) -> Option<TaskSnapshot> {
 
 pub fn shutdown_if_no_tasks() -> ! {
     shutdown(false)
+}
+
+lazy_static! {
+    ///Globle process that init user shell
+    pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
+        let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
+        let v = inode.read_all();
+        TaskControlBlock::new(v.as_slice())
+    });
+}
+///Add init process to the manager
+pub fn add_initproc() {
+    add_task(INITPROC.clone());
 }

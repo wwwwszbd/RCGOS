@@ -45,16 +45,30 @@ fn easy_fs_pack() -> std::io::Result<()> {
                 .takes_value(true)
                 .help("Executable target dir(with backslash)"),
         )
+        .arg(
+            Arg::with_name("output")
+                .short("o")
+                .long("output")
+                .takes_value(true)
+                .help("Output image path"),
+        )
         .get_matches();
     let src_path = matches.value_of("source").unwrap();
     let target_path = matches.value_of("target").unwrap();
-    println!("src_path = {}\ntarget_path = {}", src_path, target_path);
+    let img_path = matches
+        .value_of("output")
+        .map(|p| p.to_string())
+        .unwrap_or_else(|| format!("{}{}", target_path, "fs.img"));
+    println!(
+        "src_path = {}\ntarget_path = {}\nimg_path = {}",
+        src_path, target_path, img_path
+    );
     let block_file = Arc::new(BlockFile(Mutex::new({
         let f = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .open(format!("{}{}", target_path, "fs.img"))?;
+            .open(&img_path)?;
         f.set_len(16 * 2048 * 512).unwrap();
         f
     })));

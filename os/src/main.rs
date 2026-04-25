@@ -16,6 +16,8 @@ mod sync;
 mod config;
 mod task;
 mod stack_trace;
+mod drivers;
+mod fs;
 pub mod loader;
 pub mod syscall;
 pub mod trap;

@@ -196,6 +196,11 @@ impl StepByOne for VirtPageNum {
         self.0 += 1;
     }
 }
+impl StepByOne for PhysPageNum {
+    fn step(&mut self) {
+        self.0 += 1;
+    }
+}
 
 #[derive(Copy, Clone)]
 /// 简单区间结构（左闭右开）。

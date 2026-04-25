@@ -1,0 +1,1 @@
+/root/rCore-dev/projects/RCGOS/user/target/riscv64gc-unknown-none-elf/release/filetest_simple: /root/rCore-dev/projects/RCGOS/user/src/bin/filetest_simple.rs /root/rCore-dev/projects/RCGOS/user/src/console.rs /root/rCore-dev/projects/RCGOS/user/src/lang_items.rs /root/rCore-dev/projects/RCGOS/user/src/lib.rs /root/rCore-dev/projects/RCGOS/user/src/syscall.rs

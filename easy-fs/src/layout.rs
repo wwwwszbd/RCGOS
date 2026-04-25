@@ -101,6 +101,7 @@ impl DiskInode {
     pub fn is_dir(&self) -> bool {
         self.type_ == DiskInodeType::Directory
     }
+    #[allow(dead_code)]
     pub fn is_file(&self) -> bool {
         self.type_ == DiskInodeType::File
     }

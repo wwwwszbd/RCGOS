@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 
 use crate::{
     config::MAX_SYSCALL_NUM,
-    loader::get_app_data_by_name,
+    fs::{open_file, OpenFlags},
     mm::{translated_byte_buffer_checked, translated_refmut, translated_str},
     task::{add_task, change_program_brk, current_task, current_user_token, exit_current_and_run_next, get_task_snapshot, suspend_current_and_run_next, TaskStatus},
     timer::get_time_ms,
@@ -39,7 +39,7 @@ pub struct TaskInfo {
 
 /// 退出当前任务并切换到下一个任务。
 pub fn sys_exit(exit_code: i32) -> ! {
-    println!("[kernel] Application exited with code {}", exit_code);
+    // println!("[kernel] Application exited with code {}", exit_code);
     exit_current_and_run_next(exit_code);
     panic!("Unreachable in sys_exit!");
 }
@@ -186,9 +186,10 @@ pub fn sys_fork() -> isize {
 pub fn sys_exec(path: *const u8) -> isize {
     let token = current_user_token();
     let path = translated_str(token, path);
-    if let Some(data) = get_app_data_by_name(path.as_str()) {
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all();
         let task = current_task().unwrap();
-        task.exec(data);
+        task.exec(all_data.as_slice());
         0
     } else {
         -1

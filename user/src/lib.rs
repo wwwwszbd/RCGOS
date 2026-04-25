@@ -7,6 +7,10 @@ pub mod console;
 mod lang_items;
 mod syscall;
 
+extern crate alloc;
+#[macro_use]
+extern crate bitflags;
+
 use buddy_system_allocator::LockedHeap;
 use core::ptr::addr_of_mut;
 use syscall::*;

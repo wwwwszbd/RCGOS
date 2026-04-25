@@ -1,12 +1,8 @@
 use super::{BlockDevice, BLOCK_SZ};
-use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
-use core::alloc::Layout;
-use core::mem::ManuallyDrop;
 use core::ptr::{addr_of, addr_of_mut};
-use core::slice;
-use lazy_static::*;
+use lazy_static::lazy_static;
 use spin::Mutex;
 
 pub struct BlockCache {

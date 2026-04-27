@@ -1,11 +1,11 @@
-//!Stdin & Stdout
+//! 标准输入输出（控制台）。
 use super::File;
 use crate::mm::UserBuffer;
 use crate::sbi::console_getchar;
 use crate::task::suspend_current_and_run_next;
-///Standard input
+/// 标准输入。
 pub struct Stdin;
-///Standard output
+/// 标准输出。
 pub struct Stdout;
 
 impl File for Stdin {
@@ -17,7 +17,7 @@ impl File for Stdin {
     }
     fn read(&self, mut user_buf: UserBuffer) -> usize {
         assert_eq!(user_buf.len(), 1);
-        // busy loop
+        // 轮询等待字符输入
         let mut c: usize;
         loop {
             c = console_getchar();

@@ -1,0 +1,1 @@
+/root/rCore-dev/projects/RCGOS/user/target/riscv64gc-unknown-none-elf/release/dup_redir_test: /root/rCore-dev/projects/RCGOS/user/src/bin/dup_redir_test.rs /root/rCore-dev/projects/RCGOS/user/src/console.rs /root/rCore-dev/projects/RCGOS/user/src/lang_items.rs /root/rCore-dev/projects/RCGOS/user/src/lib.rs /root/rCore-dev/projects/RCGOS/user/src/syscall.rs

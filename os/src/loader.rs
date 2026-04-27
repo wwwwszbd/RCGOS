@@ -26,7 +26,7 @@ pub fn get_app_data(app_id: usize) -> &'static [u8] {
 }
 
 lazy_static! {
-    ///All of app's name
+    /// 所有应用名（由 `link_app.S` 生成并链接进内核）。
     static ref APP_NAMES: Vec<&'static str> = {
         let num_app = get_num_app();
         unsafe extern "C" {

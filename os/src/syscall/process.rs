@@ -1,11 +1,17 @@
 //! 进程与任务相关系统调用。
+use alloc::string::String;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use crate::{
     config::MAX_SYSCALL_NUM,
     fs::{open_file, OpenFlags},
-    mm::{translated_byte_buffer_checked, translated_refmut, translated_str},
-    task::{add_task, change_program_brk, current_task, current_user_token, exit_current_and_run_next, get_task_snapshot, suspend_current_and_run_next, TaskStatus},
+    mm::{translated_byte_buffer_checked, translated_ref, translated_refmut, translated_str},
+    task::{
+        MAX_SIG, SignalAction, SignalFlags, add_task, change_program_brk, current_task,
+        current_user_token, exit_current_and_run_next, get_task_snapshot, pid2task,
+        suspend_current_and_run_next, TaskStatus,
+    },
     timer::get_time_ms,
 };
 
@@ -39,7 +45,6 @@ pub struct TaskInfo {
 
 /// 退出当前任务并切换到下一个任务。
 pub fn sys_exit(exit_code: i32) -> ! {
-    // println!("[kernel] Application exited with code {}", exit_code);
     exit_current_and_run_next(exit_code);
     panic!("Unreachable in sys_exit!");
 }
@@ -49,6 +54,10 @@ pub fn sys_yield() -> isize {
     0
 }
 
+/// 获取时间（毫秒）。
+///
+/// - 若 `ts` 为 null，则直接返回当前时间（毫秒）。
+/// - 否则将 `TimeVal` 写入用户地址 `ts`，返回 0。
 pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     if ts.is_null() {
         return get_time_ms() as isize;
@@ -58,7 +67,7 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
         sec: get_time_ms() / 1000,
         usec: (get_time_ms() % 1000) * 1000,
     };
-    
+
     let Some(buffers) =
         translated_byte_buffer_checked(token, ts as *const u8, core::mem::size_of::<TimeVal>())
     else {
@@ -73,7 +82,7 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
             core::mem::size_of::<TimeVal>()
         )
     };
-    
+
     let mut offset = 0;
     for buffer in buffers {
         let len = buffer.len().min(time_val_bytes.len() - offset);
@@ -83,7 +92,7 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
         buffer[..len].copy_from_slice(&time_val_bytes[offset..offset + len]);
         offset += len;
     }
-    
+
     if offset == time_val_bytes.len() { 0 } else { -1 }
 }
 
@@ -183,14 +192,28 @@ pub fn sys_fork() -> isize {
     new_pid as isize
 }
 
-pub fn sys_exec(path: *const u8) -> isize {
+/// 使用 ELF 数据替换当前进程地址空间，并设置用户态参数栈（argc/argv）。
+pub fn sys_exec(path: *const u8, mut args: *const usize) -> isize {
     let token = current_user_token();
     let path = translated_str(token, path);
+    let mut args_vec: Vec<String> = Vec::new();
+    loop {
+        let arg_str_ptr = *translated_ref(token, args);
+        if arg_str_ptr == 0 {
+            break;
+        }
+        args_vec.push(translated_str(token, arg_str_ptr as *const u8));
+        unsafe {
+            args = args.add(1);
+        }
+    }
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_inode.read_all();
         let task = current_task().unwrap();
-        task.exec(all_data.as_slice());
-        0
+        let argc = args_vec.len();
+        task.exec(all_data.as_slice(), args_vec);
+        // 返回 argc；sys_exec 会修改 TrapContext，a0 会在返回用户态前被覆盖
+        argc as isize
     } else {
         -1
     }
@@ -223,5 +246,90 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         found_pid as isize
     } else {
         -2
+    }
+}
+
+pub fn sys_kill(pid: usize, signum: i32) -> isize {
+    if let Some(task) = pid2task(pid) {
+        if let Some(flag) = SignalFlags::from_bits(1 << signum) {
+            // 合法信号：向目标任务的 pending 集合中插入
+            let mut task_ref = task.inner_exclusive_access();
+            if task_ref.signals.contains(flag) {
+                return -1;
+            }
+            task_ref.signals.insert(flag);
+            0
+        } else {
+            -1
+        }
+    } else {
+        -1
+    }
+}
+
+pub fn sys_sigprocmask(mask: u32) -> isize {
+    if let Some(task) = current_task() {
+        let mut inner = task.inner_exclusive_access();
+        let old_mask = inner.signal_mask;
+        if let Some(flag) = SignalFlags::from_bits(mask) {
+            inner.signal_mask = flag;
+            old_mask.bits() as isize
+        } else {
+            -1
+        }
+    } else {
+        -1
+    }
+}
+
+pub fn sys_sigreturn() -> isize {
+    if let Some(task) = current_task() {
+        let mut inner = task.inner_exclusive_access();
+        inner.handling_sig = -1;
+        // restore the trap context
+        let trap_ctx = inner.get_trap_cx();
+        *trap_ctx = inner.trap_ctx_backup.take().unwrap();
+        // Here we return the value of a0 in the trap_ctx,
+        // otherwise it will be overwritten after we trap
+        // back to the original execution of the application.
+        trap_ctx.x[10] as isize
+    } else {
+        -1
+    }
+}
+
+fn check_sigaction_error(signal: SignalFlags, action: usize, old_action: usize) -> bool {
+    if action == 0
+        || old_action == 0
+        || signal == SignalFlags::SIGKILL
+        || signal == SignalFlags::SIGSTOP
+    {
+        true
+    } else {
+        false
+    }
+}
+
+pub fn sys_sigaction(
+    signum: i32,
+    action: *const SignalAction,
+    old_action: *mut SignalAction,
+) -> isize {
+    let token = current_user_token();
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    if signum as usize > MAX_SIG {
+        return -1;
+    }
+    if let Some(flag) = SignalFlags::from_bits(1 << signum) {
+        if check_sigaction_error(flag, action as usize, old_action as usize) {
+            return -1;
+        }
+        let prev_action = inner.signal_actions.table[signum as usize];
+        *translated_refmut(token, old_action) = prev_action;
+        inner.signal_actions.table[signum as usize] = *translated_ref(token, action);
+        0
+    } else {
+        -1
     }
 }

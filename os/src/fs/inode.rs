@@ -58,7 +58,7 @@ lazy_static! {
         Arc::new(EasyFileSystem::root_inode(&efs))
     };
 }
-/// List all files in the filesystems
+/// 列出文件系统中的所有应用名。
 pub fn list_apps() {
     println!("/**** APPS ****");
     for app in ROOT_INODE.ls() {
@@ -68,24 +68,23 @@ pub fn list_apps() {
 }
 
 bitflags! {
-    ///Open file flags
+    /// 打开文件的标志位。
     pub struct OpenFlags: u32 {
-        ///Read only
+        /// 只读。
         const RDONLY = 0;
-        ///Write only
+        /// 只写。
         const WRONLY = 1 << 0;
-        ///Read & Write
+        /// 读写。
         const RDWR = 1 << 1;
-        ///Allow create
+        /// 若不存在则创建。
         const CREATE = 1 << 9;
-        ///Clear file and return an empty one
+        /// 截断为 0 长度。
         const TRUNC = 1 << 10;
     }
 }
 
 impl OpenFlags {
-    /// Do not check validity for simplicity
-    /// Return (readable, writable)
+    /// 解析为 (readable, writable)。
     pub fn read_write(&self) -> (bool, bool) {
         if self.is_empty() {
             (true, false)
@@ -96,7 +95,7 @@ impl OpenFlags {
         }
     }
 }
-///Open file with flags
+/// 按 flags 打开文件。
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     let (readable, writable) = flags.read_write();
     if flags.contains(OpenFlags::CREATE) {

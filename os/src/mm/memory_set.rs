@@ -253,9 +253,8 @@ impl MemorySet {
             false
         }
     }
-    ///Remove all `MapArea`
+    /// 回收用户数据页：清空所有 `MapArea`。
     pub fn recycle_data_pages(&mut self) {
-        //*self = Self::new_bare();
         self.areas.clear();
     }
 }

@@ -219,6 +219,19 @@ pub fn translated_str(token: usize, ptr: *const u8) -> String {
     string
 }
 
+/// 将用户空间指针翻译为内核只读引用。
+///
+/// # Safety
+/// 调用方需保证 `ptr` 在用户地址空间内可读且满足 `T` 的对齐要求。
+///
+/// # Panics
+/// - 若 `ptr` 所在页未映射，会 panic。
+pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
+    let page_table = PageTable::from_token(token);
+    let pa = page_table.translate_va(VirtAddr::from(ptr as usize)).unwrap();
+    unsafe { (pa.0 as *const T).as_ref().unwrap() }
+}
+
 /// 将用户空间指针翻译为内核可写引用。
 ///
 /// # Safety
@@ -240,11 +253,11 @@ pub struct UserBuffer {
 }
 
 impl UserBuffer {
-    ///Create a `UserBuffer` by parameter
+    /// 由若干段用户缓冲区切片构造 `UserBuffer`。
     pub fn new(buffers: Vec<&'static mut [u8]>) -> Self {
         Self { buffers }
     }
-    ///Length of `UserBuffer`
+    /// 返回总长度（所有切片长度之和）。
     pub fn len(&self) -> usize {
         let mut total: usize = 0;
         for b in self.buffers.iter() {

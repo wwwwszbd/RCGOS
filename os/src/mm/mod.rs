@@ -14,8 +14,8 @@ pub use memory_set::{KERNEL_SPACE, MapPermission, MemorySet};
 pub use page_table::PageTable;
 use page_table::PTEFlags;
 pub use page_table::{
-    PageTableEntry, translated_byte_buffer, translated_byte_buffer_checked, translated_refmut,
-    translated_str,
+    PageTableEntry, translated_byte_buffer, translated_byte_buffer_checked, translated_ref,
+    translated_refmut, translated_str,
 };
 pub use page_table::UserBuffer;
 

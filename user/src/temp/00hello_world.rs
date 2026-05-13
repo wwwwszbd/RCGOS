@@ -1,4 +1,4 @@
-// 在屏幕上打印一行 Hello world from user mode program!
+//! 在屏幕上打印一行 Hello world from user mode program!
 
 #![no_std]
 #![no_main]

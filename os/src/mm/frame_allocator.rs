@@ -60,7 +60,7 @@ pub fn init_frame_allocator() {
     }
     FRAME_ALLOCATOR
         .exclusive_access()
-        .init(PhysAddr::from(ekernel as *const () as usize).ceil(), 
+        .init(PhysAddr::from(ekernel as *const () as usize).ceil(),
         PhysAddr::from(MEMORY_END).floor());
 }
 

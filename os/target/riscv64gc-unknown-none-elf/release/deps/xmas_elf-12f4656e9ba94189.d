@@ -1,0 +1,11 @@
+/root/rCore-dev/projects/RCGOS/os/target/riscv64gc-unknown-none-elf/release/deps/xmas_elf-12f4656e9ba94189.d: /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/lib.rs /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/header.rs /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/sections.rs /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/program.rs /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/symbol_table.rs /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/dynamic.rs /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/hash.rs
+
+/root/rCore-dev/projects/RCGOS/os/target/riscv64gc-unknown-none-elf/release/deps/libxmas_elf-12f4656e9ba94189.rmeta: /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/lib.rs /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/header.rs /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/sections.rs /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/program.rs /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/symbol_table.rs /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/dynamic.rs /root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/hash.rs
+
+/root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/lib.rs:
+/root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/header.rs:
+/root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/sections.rs:
+/root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/program.rs:
+/root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/symbol_table.rs:
+/root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/dynamic.rs:
+/root/.cargo/registry/src/mirrors.tuna.tsinghua.edu.cn-e791a3f93f26854f/xmas-elf-0.7.0/src/hash.rs:

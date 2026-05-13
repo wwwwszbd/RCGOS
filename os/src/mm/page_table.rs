@@ -66,7 +66,7 @@ impl PageTable {
             frames: vec![frame],
         }
     }
-    
+
     pub fn from_token(satp: usize) -> Self {
         Self {
             root_ppn: PhysPageNum::from(satp & ((1usize << 44) - 1)),

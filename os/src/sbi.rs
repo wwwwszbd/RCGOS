@@ -1,4 +1,4 @@
-// os/src/sbi.rs
+//! os/src/sbi.rs
 use sbi_rt::{NoReason, Shutdown, SystemFailure, system_reset};
 
 // 串口输出字符

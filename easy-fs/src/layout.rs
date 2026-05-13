@@ -112,7 +112,7 @@ impl DiskInode {
     fn _data_blocks(size: u32) -> u32 {
         (size + BLOCK_SZ as u32 - 1) / BLOCK_SZ as u32
     }
-    
+
     pub fn total_blocks(size: u32) -> u32 {
         let data_blocks = Self::_data_blocks(size) as usize;
         let mut total = data_blocks as usize;
@@ -129,7 +129,7 @@ impl DiskInode {
         }
         total as u32
     }
-    
+
     pub fn blocks_num_needed(&self, new_size: u32) -> u32 {
         assert!(new_size >= self.size);
         Self::total_blocks(new_size) - Self::total_blocks(self.size)
@@ -258,7 +258,7 @@ impl DiskInode {
             .modify(0, |indirect1: &mut IndirectBlock| {
                 while current_blocks < data_blocks.min(INODE_INDIRECT1_COUNT) {
                     v.push(indirect1[current_blocks]);
-                    //indirect1[current_blocks] = 0;
+                    // indirect1[current_blocks] = 0;
                     current_blocks += 1;
                 }
             });
@@ -298,7 +298,7 @@ impl DiskInode {
                                 v.push(*entry);
                             }
                         });
-                    //indirect2[a1] = 0;
+                    // indirect2[a1] = 0;
                 }
             });
         self.indirect2 = 0;

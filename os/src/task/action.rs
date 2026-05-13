@@ -17,6 +17,7 @@ impl Default for SignalAction {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct SignalActions {
     pub table: [SignalAction; MAX_SIG + 1],
 }
@@ -28,4 +29,3 @@ impl Default for SignalActions {
         }
     }
 }
-

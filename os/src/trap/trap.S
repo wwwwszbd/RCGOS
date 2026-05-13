@@ -11,41 +11,41 @@
     .align 2
 __alltraps:
     csrrw sp, sscratch, sp
-    # now sp->*TrapContext in user space, sscratch->user stack
-    # save other general purpose registers
+    # 此时 sp 指向用户态的 TrapContext，sscratch 保存用户栈指针
+    # 保存通用寄存器
     sd x1, 1*8(sp)
-    # skip sp(x2), we will save it later
+    # 跳过 sp(x2)，稍后单独保存
     sd x3, 3*8(sp)
-    # skip tp(x4), application does not use it
-    # save x5~x31
+    # 跳过 tp(x4)，用户程序不使用
+    # 保存 x5~x31
     .set n, 5
     .rept 27
         SAVE_GP %n
         .set n, n+1
     .endr
-    # we can use t0/t1/t2 freely, because they have been saved in TrapContext
+    # t0/t1/t2 已保存，可自由使用
     csrr t0, sstatus
     csrr t1, sepc
     sd t0, 32*8(sp)
     sd t1, 33*8(sp)
-    # read user stack from sscratch and save it in TrapContext
+    # 从 sscratch 取出用户栈指针并保存到 TrapContext
     csrr t2, sscratch
     sd t2, 2*8(sp)
-    # load kernel_satp into t0
+    # 读取 kernel_satp 到 t0
     ld t0, 34*8(sp)
-    # load trap_handler into t1
+    # 读取 trap_handler 到 t1
     ld t1, 36*8(sp)
-    # move to kernel_sp
+    # 切换到内核栈
     ld sp, 35*8(sp)
-    # switch to kernel space
+    # 切换到内核地址空间
     csrw satp, t0
     sfence.vma
-    # jump to trap_handler
+    # 跳转到 trap_handler
     jr t1
 
 __restore:
-    # a0: *TrapContext in user space(Constant); a1: user space token
-    # switch to user space
+    # a0: 用户态 TrapContext 指针；a1: 用户地址空间 token
+    # 切换到用户地址空间
     csrw satp, a1
     sfence.vma
     csrw sscratch, a0

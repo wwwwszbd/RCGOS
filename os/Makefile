@@ -29,15 +29,12 @@ DISASM ?= -x
 TEST ?=
 build: env $(KERNEL_BIN) fs-img
 env:
-				# (rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
 	cargo install cargo-binutils
 	rustup component add rust-src
 	rustup component add llvm-tools-preview
 $(KERNEL_BIN): kernel
-				@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
-kernel:
 fs-img: $(APPS)
 	@cd ../user && make build TEST=$(TEST)
 	@rm -f $(FS_IMG)
@@ -45,7 +42,7 @@ fs-img: $(APPS)
 
 $(APPS):
 
-kernel: fs-img
+kernel:
 	@echo Platform: $(BOARD)
 	@cp src/linker-$(BOARD).ld src/linker.ld
 	@cargo build $(MODE_ARG)
@@ -65,17 +62,17 @@ disasm-vim: kernel
 run: run-inner
 
 QEMU_ARGS := -machine virt \
-												 -nographic \
-												 -bios $(BOOTLOADER) \
-												 -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
-												 -drive file=$(FS_IMG),if=none,format=raw,id=x0 \
-												 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+			 -nographic \
+			 -bios $(BOOTLOADER) \
+			 -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
+			 -drive file=$(FS_IMG),if=none,format=raw,id=x0 \
+			 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 
 QEMU_NAME := qemu-system-riscv64
 qemu-version-check:
 	@sh scripts/qemu-ver-check.sh $(QEMU_NAME)
 
-run-inner: qemu-version-check fs-img
+run-inner: qemu-version-check build
 	@qemu-system-riscv64 $(QEMU_ARGS)
 
 debug: qemu-version-check build

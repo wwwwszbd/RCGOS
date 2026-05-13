@@ -3,7 +3,7 @@ use super::{FrameTracker, frame_alloc};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
-use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT, USER_STACK_SIZE};
+use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE};
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -136,7 +136,7 @@ impl MemorySet {
         }
         memory_set
     }
-    /// 从 ELF 构建用户地址空间，并返回用户栈顶与入口地址。
+    /// 从 ELF 构建用户地址空间，并返回用户栈基址与入口地址。
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
         let mut memory_set = Self::new_bare();
         // map trampoline
@@ -171,26 +171,10 @@ impl MemorySet {
                 );
             }
         }
-        // map user stack with U flags
         let max_end_va: VirtAddr = max_end_vpn.into();
-        let mut user_stack_bottom: usize = max_end_va.into();
-        // guard page
-        user_stack_bottom += PAGE_SIZE;
-        let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
-        memory_set.push(MapArea::new(
-            user_stack_bottom.into(),
-            user_stack_top.into(),
-            MapType::Framed,
-            MapPermission::R | MapPermission::W | MapPermission::U,
-        ), None);
-        // map TrapContext
-        memory_set.push(MapArea::new(
-            TRAP_CONTEXT.into(),
-            TRAMPOLINE.into(),
-            MapType::Framed,
-            MapPermission::R | MapPermission::W,
-        ), None);
-        (memory_set, user_stack_top, elf.header.pt2.entry_point() as usize)
+        let mut user_stack_base: usize = max_end_va.into();
+        user_stack_base += PAGE_SIZE;
+        (memory_set, user_stack_base, elf.header.pt2.entry_point() as usize)
     }
 
     pub fn from_existed_user(user_space: &Self) -> Self {

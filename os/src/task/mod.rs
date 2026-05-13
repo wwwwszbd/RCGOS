@@ -1,27 +1,30 @@
 mod action;
 mod context;
+mod id;
 mod manager;
-mod pid;
+mod process;
 mod processor;
 mod signal;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use self::id::TaskUserRes;
 use crate::config::MAX_SYSCALL_NUM;
 use crate::fs::{OpenFlags, list_apps, open_file};
 use crate::sbi::shutdown;
-use crate::timer::get_time_ms;
-use crate::mm::VirtAddr;
-use alloc::sync::Arc;
+use crate::timer::{get_time_ms, remove_timer};
+use alloc::{sync::Arc, vec::Vec};
 use lazy_static::lazy_static;
-use manager::remove_from_pid2task;
-pub use action::{SignalAction, SignalActions};
+use process::ProcessControlBlock;
+
+pub use action::SignalAction;
 pub use context::TaskContext;
-pub use manager::{add_task, fetch_task, pid2task};
-pub use pid::{KernelStack, PidHandle, pid_alloc};
+pub use id::{IDLE_PID, KernelStack, PidHandle, kstack_alloc, pid_alloc};
+pub use manager::{add_task, fetch_task, pid2process, remove_from_pid2process, remove_task, wakeup_task};
 pub use processor::{
-    current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task,
+    current_process, current_task, current_trap_cx, current_trap_cx_user_va,
+    current_user_token, run_tasks, schedule, take_current_task,
 };
 pub use signal::{MAX_SIG, SignalFlags};
 pub use switch::__switch;
@@ -44,17 +47,62 @@ pub fn suspend_current_and_run_next() {
     schedule(task_cx_ptr);
 }
 
+pub fn block_current_and_run_next() {
+    let task = take_current_task().unwrap();
+    let mut task_inner = task.inner_exclusive_access();
+    let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
+    task_inner.task_status = TaskStatus::Blocked;
+    drop(task_inner);
+    schedule(task_cx_ptr);
+}
+
 pub fn exit_current_and_run_next(exit_code: i32) {
     let task = take_current_task().unwrap();
-    remove_from_pid2task(task.getpid());
-    let mut inner = task.inner_exclusive_access();
-    inner.task_status = TaskStatus::Zombie;
-    inner.exit_code = exit_code;
-    inner.children.clear();
-    inner.memory_set.recycle_data_pages();
-    inner.fd_table.clear();
-    drop(inner);
+    let mut task_inner = task.inner_exclusive_access();
+    let process = task.process.upgrade().unwrap();
+    let tid = task_inner.res.as_ref().unwrap().tid;
+    task_inner.exit_code = Some(exit_code);
+    task_inner.res = None;
+    task_inner.task_status = TaskStatus::Exited;
+    drop(task_inner);
     drop(task);
+    if tid == 0 {
+        let pid = process.getpid();
+        if pid == IDLE_PID {
+            println!("[kernel] Idle process exit with exit_code {} ...", exit_code);
+            shutdown(exit_code != 0);
+        }
+        remove_from_pid2process(pid);
+        let mut process_inner = process.inner_exclusive_access();
+        process_inner.is_zombie = true;
+        process_inner.exit_code = exit_code;
+        {
+            let mut initproc_inner = INITPROC.inner_exclusive_access();
+            for child in process_inner.children.iter() {
+                child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
+                initproc_inner.children.push(child.clone());
+            }
+        }
+        let mut recycle_res = Vec::<TaskUserRes>::new();
+        for task in process_inner.tasks.iter().filter(|t| t.is_some()) {
+            let task = task.as_ref().unwrap();
+            remove_inactive_task(Arc::clone(task));
+            let mut task_inner = task.inner_exclusive_access();
+            if let Some(res) = task_inner.res.take() {
+                recycle_res.push(res);
+            }
+        }
+        drop(process_inner);
+        recycle_res.clear();
+        let mut process_inner = process.inner_exclusive_access();
+        process_inner.children.clear();
+        process_inner.memory_set.recycle_data_pages();
+        process_inner.fd_table.clear();
+        while process_inner.tasks.len() > 1 {
+            process_inner.tasks.pop();
+        }
+    }
+    drop(process);
     let mut _unused = TaskContext::zero_init();
     schedule(&mut _unused as *mut _);
 }
@@ -69,32 +117,6 @@ pub fn record_syscall_times(syscall_id: usize) {
     }
 }
 
-pub fn change_program_brk(size: i32) -> Option<usize> {
-    let task = current_task()?;
-    let mut inner = task.inner_exclusive_access();
-    let old_break = inner.program_brk;
-    let new_brk = inner.program_brk as isize + size as isize;
-    if new_brk < inner.heap_bottom as isize {
-        return None;
-    }
-    let heap_bottom = inner.heap_bottom;
-    let result = if size < 0 {
-        inner
-            .memory_set
-            .shrink_to(VirtAddr(heap_bottom), VirtAddr(new_brk as usize))
-    } else {
-        inner
-            .memory_set
-            .append_to(VirtAddr(heap_bottom), VirtAddr(new_brk as usize))
-    };
-    if result {
-        inner.program_brk = new_brk as usize;
-        Some(old_break)
-    } else {
-        None
-    }
-}
-
 #[derive(Copy, Clone)]
 pub struct TaskSnapshot {
     pub id: usize,
@@ -105,13 +127,17 @@ pub struct TaskSnapshot {
 
 pub fn get_task_snapshot(pid: usize) -> Option<TaskSnapshot> {
     let task = if let Some(cur) = current_task() {
-        if cur.getpid() == pid {
+        if cur.process.upgrade().unwrap().getpid() == pid {
             cur
         } else {
-            manager::find_task_in_ready_queue(pid)?
+            let process = pid2process(pid)?;
+            let inner = process.inner_exclusive_access();
+            inner.tasks.get(0)?.as_ref()?.clone()
         }
     } else {
-        manager::find_task_in_ready_queue(pid)?
+        let process = pid2process(pid)?;
+        let inner = process.inner_exclusive_access();
+        inner.tasks.get(0)?.as_ref()?.clone()
     };
     let inner = task.inner_exclusive_access();
     let time_ms = if inner.first_schedule_time == 0 {
@@ -132,125 +158,33 @@ pub fn shutdown_if_no_tasks() -> ! {
 }
 
 lazy_static! {
-    /// initproc 进程：负责拉起用户态 shell
-    pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
+    pub static ref INITPROC: Arc<ProcessControlBlock> = {
         let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
         let v = inode.read_all();
-        TaskControlBlock::new(v.as_slice())
-    });
+        ProcessControlBlock::new(v.as_slice())
+    };
 }
-/// 将 initproc 加入调度队列
+
 pub fn add_initproc() {
-    add_task(INITPROC.clone());
+    let _initproc = INITPROC.clone();
 }
 
 pub fn check_signals_error_of_current() -> Option<(i32, &'static str)> {
-    let task = current_task().unwrap();
-    let task_inner = task.inner_exclusive_access();
-    task_inner.signals.check_error()
+    let process = current_process();
+    let process_inner = process.inner_exclusive_access();
+    process_inner.signals.check_error()
 }
 
 pub fn current_add_signal(signal: SignalFlags) {
-    let task = current_task().unwrap();
-    let mut task_inner = task.inner_exclusive_access();
-    task_inner.signals |= signal;
+    let process = current_process();
+    let mut process_inner = process.inner_exclusive_access();
+    process_inner.signals |= signal;
 }
 
-fn call_kernel_signal_handler(signal: SignalFlags) {
-    let task = current_task().unwrap();
-    let mut task_inner = task.inner_exclusive_access();
-    match signal {
-        SignalFlags::SIGSTOP => {
-            task_inner.frozen = true;
-            task_inner.signals ^= SignalFlags::SIGSTOP;
-        }
-        SignalFlags::SIGCONT => {
-            if task_inner.signals.contains(SignalFlags::SIGCONT) {
-                task_inner.signals ^= SignalFlags::SIGCONT;
-                task_inner.frozen = false;
-            }
-        }
-        _ => {
-            task_inner.killed = true;
-        }
-    }
+pub fn handle_signals() {}
+
+pub fn remove_inactive_task(task: Arc<TaskControlBlock>) {
+    remove_task(Arc::clone(&task));
+    remove_timer(Arc::clone(&task));
 }
 
-fn call_user_signal_handler(sig: usize, signal: SignalFlags) {
-    let task = current_task().unwrap();
-    let mut task_inner = task.inner_exclusive_access();
-
-    let handler = task_inner.signal_actions.table[sig].handler;
-    if handler != 0 {
-        // 标记正在处理的信号，并从 pending 集合中清除
-        task_inner.handling_sig = sig as isize;
-        task_inner.signals ^= signal;
-
-        // 备份用户态 TrapContext，用于 sigreturn 恢复
-        let trap_ctx = task_inner.get_trap_cx();
-        task_inner.trap_ctx_backup = Some(*trap_ctx);
-
-        // 将返回地址改为用户注册的 handler
-        trap_ctx.sepc = handler;
-
-        // a0 = signum
-        trap_ctx.x[10] = sig;
-    } else {
-        // 默认处理：当前实现仅打印提示
-        println!("[K] task/call_user_signal_handler: default action: ignore it or kill process");
-    }
-}
-
-fn check_pending_signals() {
-    for sig in 0..(MAX_SIG + 1) {
-        let task = current_task().unwrap();
-        let task_inner = task.inner_exclusive_access();
-        let signal = SignalFlags::from_bits(1 << sig).unwrap();
-        if task_inner.signals.contains(signal) && (!task_inner.signal_mask.contains(signal)) {
-            let mut masked = true;
-            let handling_sig = task_inner.handling_sig;
-            if handling_sig == -1 {
-                masked = false;
-            } else {
-                let handling_sig = handling_sig as usize;
-                if !task_inner.signal_actions.table[handling_sig]
-                    .mask
-                    .contains(signal)
-                {
-                    masked = false;
-                }
-            }
-            if !masked {
-                drop(task_inner);
-                drop(task);
-                if signal == SignalFlags::SIGKILL
-                    || signal == SignalFlags::SIGSTOP
-                    || signal == SignalFlags::SIGCONT
-                    || signal == SignalFlags::SIGDEF
-                {
-                    // signal is a kernel signal
-                    call_kernel_signal_handler(signal);
-                } else {
-                    // signal is a user signal
-                    call_user_signal_handler(sig, signal);
-                    return;
-                }
-            }
-        }
-    }
-}
-
-pub fn handle_signals() {
-    loop {
-        check_pending_signals();
-        let (frozen, killed) = {
-            let task = current_task().unwrap();
-            let task_inner = task.inner_exclusive_access();
-            (task_inner.frozen, task_inner.killed)
-        };
-        if !frozen || killed {
-            break;
-        }
-        suspend_current_and_run_next();
-    }
-}

@@ -5,13 +5,13 @@ use super::{
 use crate::BLOCK_SZ;
 use alloc::sync::Arc;
 use spin::Mutex;
-///An easy file system on block
+/// An easy file system on block
 pub struct EasyFileSystem {
-    ///Real device
+    /// Real device
     pub block_device: Arc<dyn BlockDevice>,
-    ///Inode bitmap
+    /// Inode bitmap
     pub inode_bitmap: Bitmap,
-    ///Data bitmap
+    /// Data bitmap
     pub data_bitmap: Bitmap,
     inode_area_start_block: u32,
     data_area_start_block: u32,

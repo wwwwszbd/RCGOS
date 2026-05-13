@@ -38,7 +38,7 @@ fn clear_bss() {
         fn sbss();  // .bss段起始地址（来自链接脚本）
         fn ebss();  // .bss段结束地址
     }
-    
+
     // 遍历sbss到ebss，逐字节清零
     (sbss as *const () as usize..ebss as *const () as usize).for_each(|addr| {
         unsafe { (addr as *mut u8).write_volatile(0) }
@@ -82,7 +82,7 @@ pub fn rust_main() -> ! {
 
     // CI autotest success: sbi::shutdown(false)
     // CI autotest failed : sbi::shutdown(true)
-    //sbi::
+    // sbi::
     // shutdown(false)
     mm::init();
     info!("[kernel] back to world!");

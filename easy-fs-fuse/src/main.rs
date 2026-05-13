@@ -123,7 +123,7 @@ fn efs_test() -> std::io::Result<()> {
     let filea = root_inode.find("filea").unwrap();
     let greet_str = "Hello, world!";
     filea.write_at(0, greet_str.as_bytes());
-    //let mut buffer = [0u8; 512];
+    // let mut buffer = [0u8; 512];
     let mut buffer = [0u8; 233];
     let len = filea.read_at(0, &mut buffer);
     assert_eq!(greet_str, core::str::from_utf8(&buffer[..len]).unwrap(),);

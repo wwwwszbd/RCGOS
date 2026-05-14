@@ -1,4 +1,6 @@
 # Building
+# - build: build kernel (ELF + stripped BIN) and generate user filesystem image (fs.img)
+# - run/debug: start QEMU with bootloader + kernel BIN + virtio-blk(fs.img)
 TARGET := riscv64gc-unknown-none-elf
 MODE := release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
@@ -27,14 +29,20 @@ OBJCOPY := rust-objcopy --binary-architecture=riscv64
 # Disassembly
 DISASM ?= -x
 TEST ?=
+# Ensure toolchain components are ready.
+# - cargo-binutils provides rust-objcopy/rust-objdump wrappers
+# - rust-src/llvm-tools-preview are required by some binutils backends
 build: env $(KERNEL_BIN) fs-img
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
-	cargo install cargo-binutils
+	(cargo install --list | grep -q "^cargo-binutils v") || cargo install cargo-binutils
 	rustup component add rust-src
 	rustup component add llvm-tools-preview
 $(KERNEL_BIN): kernel
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
+# Build user programs and pack them into fs.img.
+# - -s: enumerate app names from user/src/bin/*.rs (strip extension)
+# - -t: load built app ELFs from user/target/.../release/ (files without extension)
 fs-img: $(APPS)
 	@cd ../user && make build TEST=$(TEST)
 	@rm -f $(FS_IMG)
@@ -61,6 +69,10 @@ disasm-vim: kernel
 
 run: run-inner
 
+# QEMU boot chain:
+# - -bios $(BOOTLOADER): RustSBI-based bootloader image
+# - loader device: loads kernel BIN to KERNEL_ENTRY_PA (matches kernel linker script entry)
+# - virtio-blk: exposes fs.img to the kernel as a block device (MMIO bus on QEMU virt machine)
 QEMU_ARGS := -machine virt \
 			 -nographic \
 			 -bios $(BOOTLOADER) \
@@ -76,15 +88,15 @@ run-inner: qemu-version-check build
 	@qemu-system-riscv64 $(QEMU_ARGS)
 
 debug: qemu-version-check build
-				@tmux new-session -d \
-                "qemu-system-riscv64 $(QEMU_ARGS) -s -S" && \
-                tmux split-window -h "riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
-                tmux -2 attach-session -d
+	@tmux new-session -d \
+		"qemu-system-riscv64 $(QEMU_ARGS) -s -S" && \
+		tmux split-window -h "riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
+		tmux -2 attach-session -d
 
 gdbserver: qemu-version-check build
-				@qemu-system-riscv64 $(QEMU_ARGS) -s -S
+	@qemu-system-riscv64 $(QEMU_ARGS) -s -S
 
 gdbclient:
-				@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
+	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
 
 .PHONY: build env kernel clean disasm disasm-vim run-inner fs-img gdbserver gdbclient qemu-version-check

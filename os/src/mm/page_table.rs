@@ -141,6 +141,11 @@ impl PageTable {
 ///
 /// # Panics
 /// - 若区间中存在未映射页，会 panic。
+///
+/// # Safety
+/// - 返回的切片类型为 `&'static mut [u8]` 仅为接口便利；其有效期实际上受当前用户地址空间
+///   映射关系约束。
+/// - 调用方不得在切换地址空间/解除映射后继续持有并使用这些切片，也不得制造别名可变引用。
 pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
     let page_table = PageTable::from_token(token);
     let mut start = ptr as usize;
@@ -167,6 +172,9 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
 ///
 /// # Errors
 /// - 若区间中存在未映射页，返回 `None`。
+///
+/// # Safety
+/// - 同 [`translated_byte_buffer`]：返回值的“'static”并不意味着可以跨地址空间切换长期持有。
 pub fn translated_byte_buffer_checked(
     token: usize,
     ptr: *const u8,
@@ -222,7 +230,8 @@ pub fn translated_str(token: usize, ptr: *const u8) -> String {
 /// 将用户空间指针翻译为内核只读引用。
 ///
 /// # Safety
-/// 调用方需保证 `ptr` 在用户地址空间内可读且满足 `T` 的对齐要求。
+/// - 调用方需保证 `ptr` 在用户地址空间内可读且满足 `T` 的对齐要求。
+/// - 返回引用的有效期受当前地址空间映射约束；不得跨地址空间切换/解除映射继续使用。
 ///
 /// # Panics
 /// - 若 `ptr` 所在页未映射，会 panic。
@@ -235,7 +244,9 @@ pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
 /// 将用户空间指针翻译为内核可写引用。
 ///
 /// # Safety
-/// 调用方需保证 `ptr` 在用户地址空间内可写且满足 `T` 的对齐要求。
+/// - 调用方需保证 `ptr` 在用户地址空间内可写且满足 `T` 的对齐要求。
+/// - 返回引用的有效期受当前地址空间映射约束；不得跨地址空间切换/解除映射继续使用。
+/// - 调用方需保证该内存区间不存在其它可变别名引用（包括通过系统调用参数构造的重叠区间）。
 ///
 /// # Panics
 /// - 若 `ptr` 所在页未映射，会 panic。
@@ -278,7 +289,7 @@ impl IntoIterator for UserBuffer {
         }
     }
 }
-/// Iterator of `UserBuffer`
+/// Iterator of `UserBuffer`.
 pub struct UserBufferIterator {
     buffers: Vec<&'static mut [u8]>,
     current_buffer: usize,

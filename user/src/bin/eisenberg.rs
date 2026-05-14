@@ -43,11 +43,14 @@ fn eisenberg_enter_critical(id: usize) {
         println!("Thread[{}] try enter", id);
         vstore!(FLAG[id], FlagState::Want);
         loop {
-            /* check if any with higher priority is `Want` or `In` */
+            /* check if any thread with higher priority is `Want` or `In` */
             let mut prior_thread: Option<usize> = None;
             let turn = vload!(TURN);
+            // Check threads in a ring order starting from TURN:
+            // [turn, turn+1, ..., id-1] (wrapping around).
             let ring_id = if id < turn { id + THREAD_NUM } else { id };
-            // FLAG.iter() may lead to some errors, use for-loop instead
+            // Avoid iterator-based access here and use index-based loops to keep the code simple
+            // in this no_std user environment.
             for i in turn..ring_id {
                 if vload!(FLAG[i % THREAD_NUM]) != FlagState::Out {
                     prior_thread = Some(i % THREAD_NUM);
@@ -66,9 +69,9 @@ fn eisenberg_enter_critical(id: usize) {
         }
         /* now tentatively claim the resource */
         vstore!(FLAG[id], FlagState::In);
-        /* enforce the order of `claim` and `conflict check`*/
+        /* enforce ordering between `claim` and `conflict check` */
         memory_fence!();
-        /* check if anthor thread is also `In`, which imply a conflict*/
+        /* check if another thread is also `In`, which implies a conflict */
         let mut conflict = false;
         for i in 0..THREAD_NUM {
             if i != id && vload!(FLAG[i]) == FlagState::In {
@@ -78,16 +81,16 @@ fn eisenberg_enter_critical(id: usize) {
         if !conflict {
             break;
         }
-        println!("Thread[{}]: CONFLECT!", id);
+        println!("Thread[{}]: CONFLICT!", id);
         /* no need to sleep */
     }
-    /* clain the trun */
+    /* claim the turn */
     vstore!(TURN, id);
     println!("Thread[{}] enter", id);
 }
 
 fn eisenberg_exit_critical(id: usize) {
-    /* find next one who wants to enter and give the turn to it*/
+    /* find the next one who wants to enter and give the turn to it */
     let mut next = id;
     let ring_id = id + THREAD_NUM;
     for i in (id + 1)..ring_id {
@@ -121,7 +124,8 @@ pub fn thread_fn(id: usize) -> ! {
 #[unsafe(no_mangle)]
 pub fn main() -> i32 {
     let mut v = Vec::new();
-    // TODO: really shuffle
+    // Use a fixed permutation to avoid all threads starting in order, while keeping the test
+    // deterministic and reproducible.
     assert_eq!(THREAD_NUM, 10);
     let shuffle: [usize; 10] = [0, 7, 4, 6, 2, 9, 8, 1, 3, 5];
     for i in 0..THREAD_NUM {

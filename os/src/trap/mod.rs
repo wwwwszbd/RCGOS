@@ -58,7 +58,9 @@ pub fn trap_handler() -> ! {
             cx.sepc += 4;
             // 系统调用返回值
             let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]);
-            // sys_exec 可能切换地址空间并重建 TrapContext，因此需要重新获取引用
+            // `sys_exec` 可能切换地址空间并重建 TrapContext，因此需要重新获取引用。
+            // 目前只有 `exec` 会触发这种“引用失效”的情况；若未来引入其它会重建 TrapContext
+            // 的系统调用，也应遵守同样的处理方式。
             cx = current_trap_cx();
             cx.x[10] = result as usize;
         }

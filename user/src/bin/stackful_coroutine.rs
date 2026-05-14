@@ -1,6 +1,7 @@
-// we porting below codes to Rcore Tutorial v3
-// https://cfsamson.gitbook.io/green-threads-explained-in-200-lines-of-rust/
-// https://github.com/cfsamson/example-greenthreads
+// Ported to rCore-Tutorial-v3 user space (RISC-V, no_std).
+// Original references:
+// - https://cfsamson.gitbook.io/green-threads-explained-in-200-lines-of-rust/
+// - https://github.com/cfsamson/example-greenthreads
 #![no_std]
 #![no_main]
 //#![feature(asm)]
@@ -17,9 +18,12 @@ use alloc::vec::Vec;
 
 use user_lib::exit;
 
-// In our simple example we set most constraints here.
-const DEFAULT_STACK_SIZE: usize = 4096; //128 got  SEGFAULT, 256(1024, 4096) got right results.
+// Per-task stack size in bytes.
+// This demo allocates stacks eagerly and also does a lot of printing, so too-small stacks may
+// overflow and crash. The minimal safe value depends on optimization level and the platform.
+const DEFAULT_STACK_SIZE: usize = 4096;
 const MAX_TASKS: usize = 5;
+// A global pointer to the Runtime for `guard()` / `yield_task()`.
 static mut RUNTIME: usize = 0;
 
 pub struct Runtime {
@@ -45,7 +49,7 @@ struct Task {
 #[repr(C)] // not strictly needed but Rust ABI is not guaranteed to be stable
 pub struct TaskContext {
     // 15 u64
-    x1: u64,  //ra: return addres
+    x1: u64,  // ra: return address
     x2: u64,  //sp
     x8: u64,  //s0,fp
     x9: u64,  //s1
@@ -59,14 +63,14 @@ pub struct TaskContext {
     x25: u64,
     x26: u64,
     x27: u64,
-    nx1: u64, //new return addres
+    nx1: u64, // next return address (jump target when resuming)
 }
 
 impl Task {
     fn new(id: usize) -> Self {
-        // We initialize each task here and allocate the stack. This is not neccesary,
-        // we can allocate memory for it later, but it keeps complexity down and lets us focus on more interesting parts
-        // to do it here. The important part is that once allocated it MUST NOT move in memory.
+        // Allocate a fixed stack for each task up front.
+        // The important part is that the allocated buffer must not move in memory after we take
+        // raw pointers into it (this is why the Vec lives inside the Task).
         Task {
             id: id,
             stack: vec![0_u8; DEFAULT_STACK_SIZE],
@@ -94,8 +98,11 @@ impl Runtime {
         Runtime { tasks, current: 0 }
     }
 
-    /// This is cheating a bit, but we need a pointer to our Runtime stored so we can call yield on it even if
-    /// we don't have a reference to it.
+    /// Store a pointer to the Runtime so `guard()` / `yield_task()` can call back into it.
+    ///
+    /// Safety assumptions:
+    /// - the Runtime lives for the whole program (it is created in `main` and never dropped);
+    /// - access is effectively single-threaded in this demo.
     pub fn init(&self) {
         unsafe {
             let r_ptr: *const Runtime = self;
@@ -127,7 +134,11 @@ impl Runtime {
     /// Then we call switch which will save the current context (the old context) and load the new context
     /// into the CPU which then resumes based on the context it was just passed.
     ///
-    /// NOITCE: if we comment below `#[inline(never)]`, we can not get the corrent running result
+    /// NOTE: keep this function non-inlined.
+    ///
+    /// The context switch uses a naked function + hand-written register save/restore. If the
+    /// optimizer inlines/reorders the surrounding control flow, the assumptions made by our
+    /// switch routine may no longer hold.
     #[inline(never)]
     fn t_yield(&mut self) -> bool {
         let mut pos = self.current;
@@ -153,30 +164,25 @@ impl Runtime {
             switch(&mut self.tasks[old_pos].ctx, &self.tasks[pos].ctx);
         }
 
-        // NOTE: this might look strange and it is. Normally we would just mark this as `unreachable!()` but our compiler
-        // is too smart for it's own good so it optimized our code away on release builds. Curiously this happens on windows
-        // and not on linux. This is a common problem in tests so Rust has a `black_box` function in the `test` crate that
-        // will "pretend" to use a value we give it to prevent the compiler from eliminating code. I'll just do this instead,
-        // this code will never be run anyways and if it did it would always be `true`.
+        // We should never reach here; the return value only exists to keep the optimizer from
+        // treating the call as divergent in some builds.
         self.tasks.len() > 0
     }
 
-    /// While `yield` is the logically interesting function I think this the technically most interesting.
+    /// Create a new task by preparing its initial context.
     ///
-    /// When we spawn a new task we first check if there are any available tasks (tasks in `Parked` state).
+    /// When we spawn a new task we first check if there are any available tasks.
     /// If we run out of tasks we panic in this scenario but there are several (better) ways to handle that.
     /// We keep things simple for now.
     ///
-    /// When we find an available task we get the stack length and a pointer to our u8 bytearray.
+    /// Then we take a raw pointer to the end (high address) of the task's stack buffer.
     ///
-    /// The next part we have to use some unsafe functions. First we write an address to our `guard` function
-    /// that will be called if the function we provide returns. Then we set the address to the function we
-    /// pass inn.
+    /// Finally, we build the initial context:
+    /// - `x1` (ra) points to `guard()`, so returning from the task calls back into the runtime;
+    /// - `nx1` points to the task entry function `f`;
+    /// - `x2` (sp) points to the prepared stack top.
     ///
-    /// Third, we set the value of `sp` which is the stack pointer to the address of our provided function so we start
-    /// executing that first when we are scheuled to run.
-    ///
-    /// Lastly we set the state as `Ready` which means we have work to do and is ready to do it.
+    /// Then we mark the task as `Ready`.
     pub fn spawn(&mut self, f: fn()) {
         let available = self
             .tasks
@@ -189,16 +195,15 @@ impl Runtime {
         unsafe {
             let s_ptr = available.stack.as_mut_ptr().offset(size as isize);
 
-            // make sure our stack itself is 8 byte aligned - it will always
-            // offset to a lower memory address. Since we know we're at the "high"
-            // memory address of our allocated space, we know that offsetting to
-            // a lower one will be a valid address (given that we actually allocated)
-            // enough space to actually get an aligned pointer in the first place).
+            // Ensure the stack pointer is aligned (RISC-V requires at least 8-byte alignment
+            // for 64-bit values; keeping it aligned avoids faults in some code paths).
             let s_ptr = (s_ptr as usize & !7) as *mut u8;
 
-            available.ctx.x1 = guard as *const () as u64; //ctx.x1  is old return address
-            available.ctx.nx1 = f as *const () as u64; //ctx.nx2 is new return address
-            available.ctx.x2 = s_ptr.offset(-32) as u64; //cxt.x2 is sp
+            available.ctx.x1 = guard as *const () as u64;
+            available.ctx.nx1 = f as *const () as u64;
+            // Leave a small gap below stack top to avoid clobbering metadata and keep room for
+            // potential call frames.
+            available.ctx.x2 = s_ptr.offset(-32) as u64;
         }
         available.state = State::Ready;
     }
@@ -213,9 +218,11 @@ fn guard() {
     };
 }
 
-/// We know that Runtime is alive the length of the program and that we only access from one core
-/// (so no datarace). We yield execution of the current task  by dereferencing a pointer to our
-/// Runtime and then calling `t_yield`
+/// Yield execution by calling into the global Runtime.
+///
+/// Safety assumptions:
+/// - `RUNTIME` points to a valid Runtime for the whole program;
+/// - there is no concurrent access to the Runtime in this demo.
 pub fn yield_task() {
     unsafe {
         let rt_ptr = RUNTIME as *mut Runtime;
@@ -223,36 +230,14 @@ pub fn yield_task() {
     };
 }
 
-/// So here is our inline Assembly. As you remember from our first example this is just a bit more elaborate where we first
-/// read out the values of all the registers we need and then sets all the register values to the register values we
-/// saved when we suspended exceution on the "new" task.
+/// Context switch routine.
 ///
-/// This is essentially all we need to do to save and resume execution.
+/// Saves callee-saved registers of the old task into `old`, restores those of the new task from
+/// `new`, and then jumps to `new.nx1`.
 ///
-/// Some details about inline assembly.
-///
-/// The assembly commands in the string literal is called the assemblt template. It is preceeded by
-/// zero or up to four segments indicated by ":":
-///
-/// - First ":" we have our output parameters, this parameters that this function will return.
-/// - Second ":" we have the input parameters which is our contexts. We only read from the "new" context
-/// but we modify the "old" context saving our registers there (see volatile option below)
-/// - Third ":" This our clobber list, this is information to the compiler that these registers can't be used freely
-/// - Fourth ":" This is options we can pass inn, Rust has 3: "alignstack", "volatile" and "intel"
-///
-/// For this to work on windows we need to use "alignstack" where the compiler adds the neccesary padding to
-/// make sure our stack is aligned. Since we modify one of our inputs, our assembly has "side effects"
-/// therefore we should use the `volatile` option. I **think** this is actually set for us by default
-/// when there are no output parameters given (my own assumption after going through the source code)
-/// for the `asm` macro, but we should make it explicit anyway.
-///
-/// One last important part (it will not work without this) is the #[naked] attribute. Basically this lets us have full
-/// control over the stack layout since normal functions has a prologue-and epilogue added by the
-/// compiler that will cause trouble for us. We avoid this by marking the funtion as "Naked".
-/// For this to work on `release` builds we also need to use the `#[inline(never)] attribute or else
-/// the compiler decides to inline this function (curiously this currently only happens on Windows).
-/// If the function is inlined we get a curious runtime error where it fails when switching back
-/// to as saved context and in general our assembly will not work as expected.
+/// Requirements:
+/// - must be a naked function (no prologue/epilogue);
+/// - must not be inlined, otherwise surrounding codegen may break the assumed control flow.
 ///
 /// see: https://github.com/rust-lang/rfcs/blob/master/text/1201-naked-fns.md
 /// see: https://doc.rust-lang.org/nightly/reference/inline-assembly.html
